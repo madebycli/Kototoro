@@ -138,7 +138,7 @@ class ShikimoriRepository @Inject constructor(
         return contentType == org.skepsun.kototoro.parsers.model.ContentType.VIDEO || contentType == org.skepsun.kototoro.parsers.model.ContentType.HENTAI_VIDEO
     }
 
-    override suspend fun createRate(mangaId: Long, content: ScrobblerContent) {
+    override suspend fun createRate(mangaId: Long, content: ScrobblerContent): Boolean {
         val scrobblerContentId = content.id
         val user = cachedUser ?: loadUser()
         val payload = JSONObject()
@@ -158,6 +158,7 @@ class ShikimoriRepository @Inject constructor(
         val request = Request.Builder().url(url).post(payload.toRequestBody()).build()
         val response = okHttp.newCall(request).await().parseJson()
         saveRate(response, mangaId)
+        return true
     }
 
     override suspend fun updateRate(rateId: Int, mangaId: Long, chapter: Int) {

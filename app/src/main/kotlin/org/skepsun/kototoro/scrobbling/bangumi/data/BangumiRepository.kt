@@ -462,7 +462,7 @@ private suspend fun loadBrowserFilters(category: String): BangumiBrowserFilters 
         else -> "rank"
     }
 
-    override suspend fun createRate(mangaId: Long, content: ScrobblerContent) {
+    override suspend fun createRate(mangaId: Long, content: ScrobblerContent): Boolean {
         val scrobblerContentId = content.id
         db.upsertScrobbling(
             ScrobblingEntity(
@@ -478,12 +478,12 @@ private suspend fun loadBrowserFilters(category: String): BangumiBrowserFilters 
         )
         findExistingCollection(scrobblerContentId)?.let {
             saveCollection(it, mangaId)
-            return
+            return false
         }
         updateCollection(scrobblerContentId, 3, null, null, null, isCreate = true)
         findExistingCollection(scrobblerContentId)?.let {
             saveCollection(it, mangaId)
-            return
+            return true
         }
         db.deleteScrobblingByManga(ScrobblerService.BANGUMI.id, mangaId)
         throw IOException("Bangumi collection for subject $scrobblerContentId was not created remotely")

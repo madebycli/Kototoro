@@ -24,7 +24,14 @@ interface ScrobblerRepository {
 
     suspend fun getContentInfo(id: Long): ScrobblerContentInfo
 
-    suspend fun createRate(mangaId: Long, content: ScrobblerContent)
+    /**
+     * Binds [mangaId] to [content] on the service and stores the binding locally.
+     *
+     * @return `true` when this call created the entry on the user's remote list, `false` when the list already had one
+     * and it was imported unchanged. Callers initialize a created entry from the local reading state, never an imported
+     * one.
+     */
+    suspend fun createRate(mangaId: Long, content: ScrobblerContent): Boolean
 
     suspend fun updateRate(rateId: Int, mangaId: Long, chapter: Int)
 

@@ -53,7 +53,10 @@ abstract class Scrobbler(
     val isEnabled: Boolean
         get() = repository.isAuthorized
 
-    /** Binding imports the remote entry; callers must not initialize it from a local snapshot. */
+    /**
+     * [linkContent] imports an entry that is already on the user's remote list instead of overwriting it, and replaces
+     * the previous local binding when the title is linked to another entry.
+     */
     open val preservesRemoteStateOnBinding: Boolean = false
 
     suspend fun authorize(authCode: String): ScrobblerUser {
@@ -79,13 +82,20 @@ abstract class Scrobbler(
         return repository.findContent(query, offset, isAnime)
     }
 
-    suspend fun linkContent(mangaId: Long, content: ScrobblerContent) {
+    /**
+     * Links [mangaId] to [content] on the service.
+     *
+     * @return `true` when the remote entry was created by this call and should be initialized from the local reading
+     * state, `false` when an existing remote entry was imported and must be kept as it is.
+     */
+    suspend fun linkContent(mangaId: Long, content: ScrobblerContent): Boolean {
         val previous = if (preservesRemoteStateOnBinding) resolveScrobblingEntity(mangaId) else null
-        repository.createRate(mangaId, content)
+        val created = repository.createRate(mangaId, content)
         // Keep the old mapping until the new remote entry has been read successfully.
         if (previous != null && previous.targetId != content.id) {
             db.getScrobblingDao().delete(previous)
         }
+        return created
     }
 
     suspend fun scrobble(manga: Content, chapterId: Long) {
@@ -107,6 +117,12 @@ abstract class Scrobbler(
         val entity = requireScrobblingEntity(mangaId)
         repository.updateRate(entity.id, entity.mangaId, progress)
     }
+
+    /**
+     * The service's community score for [info]'s entry on a 0–10 scale, or `null` when the service has none or this
+     * client does not read it.
+     */
+    open suspend fun getCommunityScore(info: ScrobblingInfo): Float? = null
 
     suspend fun getScrobblingInfoOrNull(mangaId: Long): ScrobblingInfo? {
         val entity = resolveScrobblingEntity(mangaId) ?: return null

@@ -4219,11 +4219,11 @@
     <string name="details_view_catalog">View catalog</string>
     <string name="details_my_reading">My reading</string>
     <string name="details_not_started">Not started</string>
-    <string name="tracking_no_links">No tracking services linked yet.</string>
-    <string name="tracking_add">Link tracking service</string>
+    <string name="tracking_sheet_summary">Syncs your status, score and progress with the trackers you are signed in to. The title, cover, description and chapters from the source stay unchanged.</string>
+    <string name="tracking_no_accounts">Sign in to a tracker such as AniList or MyAnimeList to sync your status, score and progress for this title.</string>
+    <string name="tracking_not_tracked">Not tracked</string>
     <string name="tracking_progress_value">Progress: %1$d</string>
     <string name="tracking_progress_edit">Progress</string>
-    <string name="tracking_score_value">Score: %1$d%%</string>
-    <string name="tracking_community_score">%1$s: %2$s ★</string>
-    <string name="tracking_supported_services">New links currently support AniList and MyAnimeList, which preserve existing remote progress.</string>
+    <string name="tracking_score_value">Your score: %1$s</string>
+    <string name="tracking_community_score_value">Community: %1$s</string>
 </resources>

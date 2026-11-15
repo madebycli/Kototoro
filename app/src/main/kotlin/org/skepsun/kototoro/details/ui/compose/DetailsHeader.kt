@@ -107,7 +107,6 @@ import org.skepsun.kototoro.parsers.model.ContentSource
 import org.skepsun.kototoro.parsers.model.ContentTag
 import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblingStatus
 import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblerService
-import org.skepsun.kototoro.scrobbling.common.ui.selector.INDEPENDENT_TRACKING_SERVICES
 import org.skepsun.kototoro.parsers.model.ContentType
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -251,14 +250,6 @@ fun DetailsHeader(
             ?.takeIf { it.hasRating }
             ?.let { String.format(defaultLocale, "%.1f", it.rating * 10f) }
     }
-    val communityTracking = linkedTrackingItems
-        .filter { it.hasScrobblingBinding && it.communityScore != null && it.service in INDEPENDENT_TRACKING_SERVICES }
-        .sortedByDescending { it.isPreferred }
-        .firstOrNull()
-    val trackingLabel = communityTracking?.let {
-        stringResource(R.string.tracking_community_score, stringResource(it.service.titleResId),
-            String.format(defaultLocale, "%.1f", it.communityScore))
-    } ?: stringResource(R.string.tracking)
     val state = content?.state
     val progressLabel = if (historyInfo.history != null) {
         "${(historyInfo.percent * 100f).roundToInt()}%"
@@ -534,9 +525,10 @@ fun DetailsHeader(
                             buttonSize = 36.dp,
                             iconSize = 18.dp,
                         )
-                        SuggestionChip(
+                        TrackingChip(
+                            linkedTrackingItems = linkedTrackingItems,
                             onClick = onTrackingClick,
-                            label = { Text(trackingLabel) },
+                            chipHeight = 36.dp,
                         )
                         RatingStatusChip(
                             rating = unifiedRating,
@@ -698,9 +690,9 @@ fun DetailsHeader(
                             buttonSize = 32.dp,
                             iconSize = 17.dp,
                         )
-                        SuggestionChip(
+                        TrackingChip(
+                            linkedTrackingItems = linkedTrackingItems,
                             onClick = onTrackingClick,
-                            label = { Text(trackingLabel) },
                         )
                         RatingStatusChip(
                             rating = unifiedRating,
@@ -896,9 +888,9 @@ fun DetailsHeader(
                         )
                     }
                     if (showWorkActions) {
-                        SuggestionChip(
+                        TrackingChip(
+                            linkedTrackingItems = linkedTrackingItems,
                             onClick = onTrackingClick,
-                            label = { Text(trackingLabel) },
                         )
                         RatingStatusChip(
                             rating = unifiedRating,

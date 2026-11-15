@@ -4084,11 +4084,11 @@
     <string name="kitsu_status_unreleased">Unveröffentlicht</string>
     <string name="migration_health_banner_disable">Nicht mehr anzeigen</string>
     <string name="migration_health_banner_setting">Defekte Quellen warnen</string>
-    <string name="tracking_no_links">Noch keine Tracking-Dienste verknüpft.</string>
-    <string name="tracking_add">Tracking-Dienst verknüpfen</string>
+    <string name="tracking_sheet_summary">Synchronisiert Status, Bewertung und Fortschritt mit den Trackern, bei denen du angemeldet bist. Titel, Cover, Beschreibung und Kapitel der Quelle bleiben unverändert.</string>
+    <string name="tracking_no_accounts">Melde dich bei einem Tracker wie AniList oder MyAnimeList an, um Status, Bewertung und Fortschritt dieses Titels zu synchronisieren.</string>
+    <string name="tracking_not_tracked">Nicht verfolgt</string>
     <string name="tracking_progress_value">Fortschritt: %1$d</string>
     <string name="tracking_progress_edit">Fortschritt</string>
-    <string name="tracking_score_value">Bewertung: %1$d%%</string>
-    <string name="tracking_community_score">%1$s: %2$s ★</string>
-    <string name="tracking_supported_services">Neue Verknüpfungen unterstützen derzeit AniList und MyAnimeList. Bestehender Online-Fortschritt bleibt erhalten.</string>
+    <string name="tracking_score_value">Deine Bewertung: %1$s</string>
+    <string name="tracking_community_score_value">Community: %1$s</string>
 </resources>

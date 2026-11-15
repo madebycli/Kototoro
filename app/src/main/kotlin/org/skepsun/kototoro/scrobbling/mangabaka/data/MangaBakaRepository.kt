@@ -97,13 +97,15 @@ class MangaBakaRepository(
 
     override suspend fun getContentInfo(id: Long): ScrobblerContentInfo = api.details(id)
 
-    override suspend fun createRate(mangaId: Long, content: ScrobblerContent) = mutex.withLock {
+    override suspend fun createRate(mangaId: Long, content: ScrobblerContent): Boolean = mutex.withLock {
         val previousBinding = db.findScrobblingByManga(service.id, mangaId)
+        var created = false
         authenticated { token ->
             val entry = api.entry(content.id, token) ?: run {
                 api.request("v1/my/library/${content.id}", token, "POST", buildJsonObject {
                     put("state", "plan_to_read")
                 })
+                created = true
                 api.entry(content.id, token) ?: throw IOException("MangaBaka library entry was not created")
             }
             // Linking an existing remote entry never resets its progress, score or privacy.
@@ -116,7 +118,7 @@ class MangaBakaRepository(
                 .filter { it != linked && (it.mangaId == 0L || it.mangaId == mangaId) }
                 .forEach { db.getScrobblingDao().delete(it) }
         }
-        Unit
+        created
     }
 
     override suspend fun updateRate(rateId: Int, mangaId: Long, chapter: Int) = mutex.withLock {

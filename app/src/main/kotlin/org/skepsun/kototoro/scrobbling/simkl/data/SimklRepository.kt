@@ -416,7 +416,7 @@ class SimklRepository @Inject constructor(
         return requestContentInfo(id, endpoint)
     }
 
-    override suspend fun createRate(mangaId: Long, content: ScrobblerContent) {
+    override suspend fun createRate(mangaId: Long, content: ScrobblerContent): Boolean {
         val endpoint = resolveEndpoint(content)
         contentTypeHints[content.id] = endpoint
         postWatchlistUpdate(
@@ -434,6 +434,7 @@ class SimklRepository @Inject constructor(
             comment = null,
             rating = 0f,
         )
+        return true
     }
 
     override suspend fun updateRate(rateId: Int, mangaId: Long, chapter: Int) {

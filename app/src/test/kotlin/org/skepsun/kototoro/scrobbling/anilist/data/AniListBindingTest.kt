@@ -9,6 +9,8 @@ import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skepsun.kototoro.core.db.MangaDatabase
@@ -30,15 +32,55 @@ class AniListBindingTest {
             val client = OkHttpClient.Builder().addInterceptor { chain ->
                 chain.proceed(chain.request().newBuilder().url(server.url("/")).build())
             }.build()
-            AniListRepository(context, client, storage, db).createRate(
+            val created = AniListRepository(context, client, storage, db).createRate(
                 55, ScrobblerContent(377, "Title", null, null, ""),
             )
+            assertFalse(created)
             assertEquals(1, server.requestCount)
             assertTrue(server.takeRequest().body.readUtf8().contains("mediaListEntry"))
             coVerify { dao.upsert(match {
                 it.mangaId == 55L && it.targetId == 377L && it.chapter == 12 &&
                     it.rating == 0.85f && it.status == "CURRENT" && it.comment == "Keep"
             }) }
+        }
+    }
+
+    @Test
+    fun `missing entry is created and reported as new`() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("""{"data":{"Media":{"mediaListEntry":null}}}"""))
+            server.enqueue(MockResponse().setBody("""{"data":{"SaveMediaListEntry":{
+                "id":92,"mediaId":377,"status":"CURRENT","notes":null,"score":0,"progress":0
+            }}}"""))
+            val dao = mockk<ScrobblingDao>(relaxed = true)
+            val db = mockk<MangaDatabase> { every { getScrobblingDao() } returns dao }
+            val client = OkHttpClient.Builder().addInterceptor { chain ->
+                chain.proceed(chain.request().newBuilder().url(server.url("/")).build())
+            }.build()
+            val created = AniListRepository(
+                mockk<Context>(relaxed = true), client, mockk<ScrobblerStorage>(relaxed = true), db,
+            ).createRate(55, ScrobblerContent(377, "Title", null, null, ""))
+            assertTrue(created)
+            assertEquals(2, server.requestCount)
+            assertTrue(server.takeRequest().body.readUtf8().contains("mediaListEntry"))
+            assertTrue(server.takeRequest().body.readUtf8().contains("SaveMediaListEntry"))
+            coVerify { dao.upsert(match { it.mangaId == 55L && it.targetId == 377L && it.comment == null }) }
+        }
+    }
+
+    @Test
+    fun `community score is read on a ten point scale`() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("""{"data":{"Media":{"meanScore":84}}}"""))
+            server.enqueue(MockResponse().setBody("""{"data":{"Media":{"meanScore":null}}}"""))
+            val client = OkHttpClient.Builder().addInterceptor { chain ->
+                chain.proceed(chain.request().newBuilder().url(server.url("/")).build())
+            }.build()
+            val repository = AniListRepository(
+                mockk<Context>(relaxed = true), client, mockk<ScrobblerStorage>(relaxed = true), mockk(),
+            )
+            assertEquals(8.4f, repository.getMeanScore(377))
+            assertNull(repository.getMeanScore(377))
         }
     }
 }

@@ -1264,14 +1264,14 @@ class AppRouter(
     fun showScrobblingSelectorSheet(
         manga: Content,
         scrobblerService: ScrobblerService?,
-        preserveRemoteState: Boolean = false,
+        addToFavourites: Boolean = true,
     ) {
         val composeActivity = activity as? BaseComposeActivity ?: return
         composeActivity.showComposeModal {
             ScrobblingSelectorSheetRoute(
                 manga = manga,
                 scrobblerServiceId = scrobblerService?.id ?: -1,
-                preserveRemoteState = preserveRemoteState,
+                addToFavourites = addToFavourites,
                 onDismissRequest = composeActivity::dismissComposeModal,
             )
         }

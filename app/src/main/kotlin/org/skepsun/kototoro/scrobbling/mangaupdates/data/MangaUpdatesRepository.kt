@@ -817,7 +817,7 @@ class MangaUpdatesRepository(
         )
     }
 
-    override suspend fun createRate(mangaId: Long, content: ScrobblerContent) {
+    override suspend fun createRate(mangaId: Long, content: ScrobblerContent): Boolean {
         val scrobblerContentId = content.id
         Log.d(TAG, "createRate: mangaId=$mangaId, targetId=$scrobblerContentId, title=${content.name}")
         val lines = listOf(
@@ -856,6 +856,8 @@ class MangaUpdatesRepository(
                 rating = 0f
             )
             db.upsertScrobblingForManga(entity, mangaId = mangaId)
+            // The list write above replaces any existing entry, so the caller always initializes it.
+            return true
         } else {
             Log.e(TAG, "createRate: FAILED code=$responseCode")
             throw IOException("Failed to create rate: $responseCode")

@@ -161,6 +161,7 @@ import org.skepsun.kototoro.reader.ui.ReaderState
 import org.skepsun.kototoro.favourites.ui.categories.select.compose.FavoriteCategoryDialog
 import org.skepsun.kototoro.main.ui.compose.TopBarControlSurface
 import org.skepsun.kototoro.stats.ui.sheet.ContentStatsViewModel
+import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblerService
 import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblingStatus
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.Backdrop
@@ -268,7 +269,8 @@ private fun DetailsScreenContent(
     isTemporaryReadOnly: Boolean = false,
 ) {
     val detailsScreenState = rememberDetailsScreenState()
-    var showTrackingDialog by remember { mutableStateOf(false) }
+    // The trackers the user is signed in to while the tracking sheet is open; null while it is closed.
+    var trackingSheetServices by remember { mutableStateOf<List<ScrobblerService>?>(null) }
     val trackingEntries by viewModel.scrobblingInfo.collectAsStateWithLifecycle()
     val showDeleteLocalDialog by detailsScreenState.showDeleteLocalDialog
     val showShareOptions by detailsScreenState.showShareOptions
@@ -886,17 +888,25 @@ private fun DetailsScreenContent(
             }
         }
     }
-    if (showTrackingDialog) {
-        TrackingDialog(
+    trackingSheetServices?.let { services ->
+        DetailsTrackingSheet(
+            services = services,
             entries = trackingEntries,
-            onDismiss = { showTrackingDialog = false },
-            onAdd = {
-                showTrackingDialog = false
-                viewModel.prepareTrackingContent { appRouter.showScrobblingSelectorSheet(it, null, preserveRemoteState = true) }
-            },
-            onOpen = { service ->
-                showTrackingDialog = false
+            linkedTrackingItems = linkedTrackingItems,
+            onDismissRequest = { trackingSheetServices = null },
+            onOpenEntry = { service ->
+                trackingSheetServices = null
                 appRouter.showScrobblingInfoSheet(service)
+            },
+            onLink = { service ->
+                trackingSheetServices = null
+                viewModel.prepareTrackingContent { content ->
+                    appRouter.showScrobblingSelectorSheet(content, service, addToFavourites = false)
+                }
+            },
+            onManageAccounts = {
+                trackingSheetServices = null
+                appRouter.openTrackingAccountsSettings()
             },
         )
     }
@@ -906,7 +916,9 @@ private fun DetailsScreenContent(
             return@handleDetailsAction
         }
         when (action) {
-            DetailsAction.OpenTracking -> { showTrackingDialog = true }
+            DetailsAction.OpenTracking -> {
+                trackingSheetServices = viewModel.authorizedTrackingServices()
+            }
             DetailsAction.ToggleList -> {
                 openPaneTab(DETAILS_TAB_CHAPTERS)
             }

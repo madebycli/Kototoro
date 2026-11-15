@@ -1,8 +1,5 @@
 package org.skepsun.kototoro.scrobbling.common.ui.selector
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import androidx.recyclerview.widget.RecyclerView.NO_ID
@@ -43,11 +40,6 @@ import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblingStatus
 import org.skepsun.kototoro.scrobbling.common.ui.selector.model.ScrobblerHint
 import javax.inject.Inject
 
-internal val INDEPENDENT_TRACKING_SERVICES = setOf(
-    org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblerService.ANILIST,
-    org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblerService.MAL,
-)
-
 @HiltViewModel
 class ScrobblingSelectorViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
@@ -67,23 +59,13 @@ class ScrobblingSelectorViewModel @Inject constructor(
             "ScrobblingSelectorViewModel is not initialized with a manga"
         }
 
-    private val allScrobblers = scrobblers.sortedBy { it.scrobblerService.id }
-    private var independentTracking = false
-    var availableScrobblers by mutableStateOf(allScrobblers)
-        private set
+    val availableScrobblers = scrobblers.sortedBy { it.scrobblerService.id }
 
-    fun requireStatePreservingServices() {
-        independentTracking = true
-        val safeServices = allScrobblers.filter {
-            it.scrobblerService in INDEPENDENT_TRACKING_SERVICES && it.preservesRemoteStateOnBinding
-        }
-        if (availableScrobblers == safeServices) return
-        initJob?.cancel()
-        loadingJob?.cancel()
-        selectedScrobblerIndex.value = 0
-        availableScrobblers = safeServices
-        if (initializedMangaId != null && safeServices.isNotEmpty()) initialize()
-    }
+    /**
+     * Whether linking also puts an unfavourited title into the first favourites category. The details page's
+     * tracking sheet turns this off: tracking a title there must not change the library.
+     */
+    private var addToFavourites = true
 
     val selectedScrobblerIndex = MutableStateFlow(0)
 
@@ -135,7 +117,8 @@ class ScrobblingSelectorViewModel @Inject constructor(
         }
     }
 
-    fun initialize(manga: Content) {
+    fun initialize(manga: Content, addToFavourites: Boolean = true) {
+        this.addToFavourites = addToFavourites
         val isSameManga = initializedMangaId == manga.id
         mangaState = manga
         if (searchQuery.value.isBlank() || !isSameManga) {
@@ -219,7 +202,7 @@ class ScrobblingSelectorViewModel @Inject constructor(
         }
         doneJob = launchLoadingJob(Dispatchers.Default) {
             val prevInfo = currentScrobbler.getScrobblingInfoOrNull(manga.id)
-            currentScrobbler.linkContent(manga.id, selectedContent)
+            val created = currentScrobbler.linkContent(manga.id, selectedContent)
             var linkedInfo = currentScrobbler.getScrobblingInfoOrNull(manga.id)
             if (linkedInfo == null) {
                 currentScrobbler.syncLibrary()
@@ -229,7 +212,8 @@ class ScrobblingSelectorViewModel @Inject constructor(
                 "Scrobbling info for manga ${manga.id} not found after linking target $targetId"
             }
             val history = historyRepository.getOne(manga)
-            if (!currentScrobbler.preservesRemoteStateOnBinding) {
+            // An entry that was already on the user's list keeps its remote status, score and progress.
+            if (created) {
                 currentScrobbler.updateScrobblingInfo(
                     mangaId = manga.id,
                     rating = prevInfo?.rating ?: 0f,
@@ -247,7 +231,7 @@ class ScrobblingSelectorViewModel @Inject constructor(
                     )
                 }
             }
-            if (!independentTracking && favouritesRepository.getCategoriesIdsByWork(manga.id).isEmpty()) {
+            if (addToFavourites && favouritesRepository.getCategoriesIdsByWork(manga.id).isEmpty()) {
                 val categories = favouritesRepository.observeCategories().firstOrNull()
                 val categoryId = if (!categories.isNullOrEmpty()) {
                     categories.first().id
