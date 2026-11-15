@@ -6,16 +6,13 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.fragment.app.FragmentActivity
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.launch
 import org.skepsun.kototoro.core.exceptions.resolve.ExceptionResolver
-import org.skepsun.kototoro.core.ui.BaseActivityEntryPoint
+import org.skepsun.kototoro.core.ui.BaseComposeActivity
 import org.skepsun.kototoro.core.ui.compose.TvModalBottomSheet
 import org.skepsun.kototoro.core.ui.theme.KototoroTheme
 import org.skepsun.kototoro.core.util.ext.findActivity
@@ -33,14 +30,9 @@ fun ScrobblingSelectorSheetRoute(
     viewModel: ScrobblingSelectorViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
-    val activity = context.findActivity() as? FragmentActivity
-    val exceptionResolver = remember(activity) {
-        activity?.let {
-            EntryPointAccessors.fromApplication<BaseActivityEntryPoint>(
-                it.applicationContext,
-            ).exceptionResolverFactory.create(it)
-        }
-    }
+    // Reuse the host's resolver: it registers activity-result launchers, which Android only allows before the
+    // activity starts, so creating one here while the sheet opens on a resumed activity crashes.
+    val exceptionResolver = (context.findActivity() as? BaseComposeActivity)?.exceptionResolver
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
 

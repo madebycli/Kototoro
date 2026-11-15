@@ -896,7 +896,7 @@ private fun DetailsScreenContent(
             onDismissRequest = { trackingSheetServices = null },
             onOpenEntry = { service ->
                 trackingSheetServices = null
-                appRouter.showScrobblingInfoSheet(service)
+                appRouter.showScrobblingInfoSheet(service, viewModel)
             },
             onLink = { service ->
                 trackingSheetServices = null

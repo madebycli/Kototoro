@@ -82,6 +82,7 @@ import org.skepsun.kototoro.core.jsonsource.JsonContentSource
 import org.skepsun.kototoro.core.util.ext.toUriOrNull
 import org.skepsun.kototoro.details.ui.DetailsActivity
 import org.skepsun.kototoro.details.ui.related.RelatedContentActivity
+import org.skepsun.kototoro.details.ui.DetailsViewModel
 import org.skepsun.kototoro.details.ui.scrobbling.ScrobblingInfoSheetRoute
 import org.skepsun.kototoro.download.ui.compose.DownloadDialog
 import org.skepsun.kototoro.download.ui.list.DownloadsActivity
@@ -1277,11 +1278,12 @@ class AppRouter(
         }
     }
 
-    fun showScrobblingInfoSheet(scrobblerService: ScrobblerService) {
+    fun showScrobblingInfoSheet(scrobblerService: ScrobblerService, viewModel: DetailsViewModel) {
         val composeActivity = activity as? BaseComposeActivity ?: return
         composeActivity.showComposeModal {
             ScrobblingInfoSheetRoute(
                 scrobblerServiceId = scrobblerService.id,
+                viewModel = viewModel,
                 onDismissRequest = composeActivity::dismissComposeModal,
             )
         }
