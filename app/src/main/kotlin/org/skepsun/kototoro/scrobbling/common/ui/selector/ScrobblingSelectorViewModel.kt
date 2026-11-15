@@ -35,6 +35,7 @@ import org.skepsun.kototoro.parsers.util.ifZero
 import org.skepsun.kototoro.parsers.util.runCatchingCancellable
 import org.skepsun.kototoro.scrobbling.common.domain.Scrobbler
 import org.skepsun.kototoro.scrobbling.common.domain.ScrobblerAuthRequiredException
+import org.skepsun.kototoro.scrobbling.common.domain.TrackerProgressSync
 import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblerContent
 import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblingStatus
 import org.skepsun.kototoro.scrobbling.common.ui.selector.model.ScrobblerHint
@@ -46,6 +47,7 @@ class ScrobblingSelectorViewModel @Inject constructor(
     scrobblers: Set<@JvmSuppressWildcards Scrobbler>,
     private val contentDataRepository: ContentDataRepository,
     private val historyRepository: HistoryRepository,
+    private val trackerProgressSync: TrackerProgressSync,
     private val favouritesRepository: org.skepsun.kototoro.favourites.domain.FavouritesRepository,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
 ) : BaseViewModel() {
@@ -224,13 +226,11 @@ class ScrobblingSelectorViewModel @Inject constructor(
                     },
                     comment = prevInfo?.comment,
                 )
-                if (history != null && manga.chapters?.any { it.id == history.chapterId } == true) {
-                    currentScrobbler.scrobble(
-                        manga = manga,
-                        chapterId = history.chapterId,
-                    )
-                }
             }
+            // Whichever side has read further wins: the local read state goes up, or the remote entry does.
+            runCatchingCancellable {
+                trackerProgressSync.sync(currentScrobbler, manga, refresh = false)
+            }.onFailure { it.printStackTraceDebug() }
             if (addToFavourites && favouritesRepository.getCategoriesIdsByWork(manga.id).isEmpty()) {
                 val categories = favouritesRepository.observeCategories().firstOrNull()
                 val categoryId = if (!categories.isNullOrEmpty()) {

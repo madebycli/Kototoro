@@ -489,6 +489,12 @@ private suspend fun loadBrowserFilters(category: String): BangumiBrowserFilters 
         throw IOException("Bangumi collection for subject $scrobblerContentId was not created remotely")
     }
 
+    override suspend fun refreshRate(mangaId: Long, targetId: Long, mediaType: String): Boolean {
+        val collection = findExistingCollection(targetId) ?: return false
+        saveCollection(collection, mangaId)
+        return true
+    }
+
     override suspend fun updateRate(rateId: Int, mangaId: Long, chapter: Int) {
         val entity = db.findScrobblingByManga(ScrobblerService.BANGUMI.id, mangaId) ?: return
         updateCollection(entity.targetId, null, null, null, chapter)

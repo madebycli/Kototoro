@@ -124,6 +124,7 @@ import org.skepsun.kototoro.reader.ui.FULLY_READ_CHAPTER_ID
 import org.skepsun.kototoro.reader.ui.ReaderState
 import org.skepsun.kototoro.scrobbling.common.domain.Scrobbler
 import org.skepsun.kototoro.scrobbling.common.domain.tryScrobble
+import org.skepsun.kototoro.scrobbling.common.domain.TrackerProgressSync
 import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblingInfo
 import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblingStatus
 import org.skepsun.kototoro.stats.data.StatsRepository
@@ -382,6 +383,7 @@ class DetailsViewModel @Inject constructor(
     private val spaceContentPolicy: SpaceContentPolicy,
     private val spaceBrowseScope: SpaceBrowseScope,
     private val categoryDisplayPreferences: FavouriteCategoryDisplayPreferences,
+    private val trackerProgressSync: TrackerProgressSync,
     chapterTranslationStore: org.skepsun.kototoro.reader.translate.data.ChapterTranslationStore,
 ) : ChaptersPagesViewModel(
     settings = settings,
@@ -2735,6 +2737,13 @@ class DetailsViewModel @Inject constructor(
     val selectedBranchValue: String?
         get() = selectedBranch.value
 
+    /**
+     * Entries already reconciled during this visit, by service, remote entry and local title. Declared before the init
+     * block below, whose collector reads it from another thread.
+     */
+    private val syncedTrackerEntries: MutableSet<Triple<ScrobblerService, Long, Long>> =
+        java.util.concurrent.ConcurrentHashMap.newKeySet()
+
     init {
         if (initialContentIntentOverride?.mangaId?.takeIf { it != 0L } != null || intent.mangaId != 0L || intent.manga != null) {
             loadingJob = doLoad(force = false)
@@ -2743,6 +2752,13 @@ class DetailsViewModel @Inject constructor(
             .onEach {
                 refreshTrackingMatchSuggestion()
             }
+            .launchIn(viewModelScope + Dispatchers.Default)
+        // Each linked tracker entry is reconciled once per visit, as soon as the chapters are known.
+        combine(
+            scrobblingInfo,
+            mangaDetails.map { it?.chapters?.isNotEmpty() == true }.distinctUntilChanged(),
+        ) { entries, _ -> entries }
+            .onEach { entries -> syncTrackerProgress(entries) }
             .launchIn(viewModelScope + Dispatchers.Default)
         launchJob(Dispatchers.Default + SkipErrors) {
             val manga = mangaDetails.firstOrNull { !it?.chapters.isNullOrEmpty() } ?: return@launchJob
@@ -3714,18 +3730,49 @@ class DetailsViewModel @Inject constructor(
     fun prepareTrackingContent(onReady: (Content) -> Unit) {
         launchJob(Dispatchers.Main) {
             val content = withContext(Dispatchers.IO) {
-                val id = ensureCurrentWorkContent() ?: return@withContext null
-                val stored = dataRepository.findPreferredLocalContentById(id, withChapters = true)
-                    ?: dataRepository.findContentById(id, withChapters = true)
-                    ?: return@withContext null
-                val loadedChapters = getContentOrNull()?.takeIf { it.id == stored.id }?.chapters
-                if (stored.chapters.isNullOrEmpty() && !loadedChapters.isNullOrEmpty()) {
-                    stored.copy(chapters = loadedChapters)
-                } else {
-                    stored
-                }
+                ensureCurrentWorkContent()?.let { loadTrackingContent(it) }
             }
             if (content != null) onReady(content)
+        }
+    }
+
+    /**
+     * Reads [service]'s entry again and reconciles it with the local read state now; [onDone] reports which side
+     * moved.
+     */
+    fun syncTrackingProgress(service: ScrobblerService, onDone: (TrackerProgressSync.Result) -> Unit) {
+        val scrobbler = getScrobbler(service.id) ?: return
+        launchJob(Dispatchers.Default) {
+            val mangaId = resolveCurrentLocalMangaId() ?: return@launchJob
+            val content = loadTrackingContent(mangaId) ?: return@launchJob
+            val result = trackerProgressSync.sync(scrobbler, content, preferredBranch = selectedBranch.value)
+            withContext(Dispatchers.Main) { onDone(result) }
+        }
+    }
+
+    private suspend fun syncTrackerProgress(entries: List<ScrobblingInfo>) {
+        for (entry in entries) {
+            val key = Triple(entry.scrobbler, entry.targetId, entry.mangaId)
+            if (entry.mangaId == 0L || key in syncedTrackerEntries) continue
+            val scrobbler = scrobblers.firstOrNull { it.scrobblerService == entry.scrobbler && it.isEnabled } ?: continue
+            val content = loadTrackingContent(entry.mangaId)?.takeUnless { it.chapters.isNullOrEmpty() } ?: continue
+            if (!syncedTrackerEntries.add(key)) continue
+            runCatchingCancellable {
+                trackerProgressSync.sync(scrobbler, content, preferredBranch = selectedBranch.value)
+            }.onFailure { it.printStackTraceDebug() }
+        }
+    }
+
+    /** The stored title tracker entries bind to, with its chapters, falling back to the loaded ones. */
+    private suspend fun loadTrackingContent(mangaId: Long): Content? {
+        val stored = dataRepository.findPreferredLocalContentById(mangaId, withChapters = true)
+            ?: dataRepository.findContentById(mangaId, withChapters = true)
+            ?: return null
+        val loadedChapters = getContentOrNull()?.takeIf { it.id == stored.id }?.chapters
+        return if (stored.chapters.isNullOrEmpty() && !loadedChapters.isNullOrEmpty()) {
+            stored.copy(chapters = loadedChapters)
+        } else {
+            stored
         }
     }
 

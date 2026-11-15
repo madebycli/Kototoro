@@ -1160,6 +1160,14 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
         get() = prefs.getEnumValue(KEY_PREFERRED_TRACKING_SITE, ScrobblerService.BANGUMI)
         set(value) = prefs.edit { putEnumValue(KEY_PREFERRED_TRACKING_SITE, value) }
 
+    /**
+     * Keeps the local read state and linked tracker entries in step both ways: chapters a tracker counts as read are
+     * marked read here, and chapters read here are reported to the tracker.
+     */
+    var isTrackingProgressSyncEnabled: Boolean
+        get() = prefs.getBoolean(KEY_TRACKING_PROGRESS_SYNC, true)
+        set(value) = prefs.edit { putBoolean(KEY_TRACKING_PROGRESS_SYNC, value) }
+
     var trackingMetadataSourceStrategy: TrackingMetadataSourceStrategy
         get() = prefs.getEnumValue(KEY_TRACKING_METADATA_SOURCE_STRATEGY, TrackingMetadataSourceStrategy.LOCAL_THEN_API)
         set(value) = prefs.edit { putEnumValue(KEY_TRACKING_METADATA_SOURCE_STRATEGY, value) }
@@ -3140,6 +3148,7 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
         const val KEY_TRACK_WARNING = "track_warning"
         const val KEY_TRACKER_NOTIFICATIONS = "tracker_notifications"
         const val KEY_PREFERRED_TRACKING_SITE = "preferred_tracking_site"
+        const val KEY_TRACKING_PROGRESS_SYNC = "tracking_progress_sync"
         const val KEY_TRACKER_NO_NSFW = "tracker_no_nsfw"
         const val KEY_TRACKER_SKIP_COMPLETED = "tracker_skip_completed"
         const val KEY_TRACKER_MARK_DUPLICATES_READ = "tracker_mark_duplicates_read"

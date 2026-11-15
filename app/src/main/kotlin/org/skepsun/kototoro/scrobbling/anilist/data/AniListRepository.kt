@@ -188,14 +188,7 @@ class AniListRepository @Inject constructor(
         val scrobblerContentId = content.id
         // Ask AniList for the current viewer's entry before creating one. A mutation used
         // as a lookup can reset an existing list entry on some services.
-        val existing = doRequest(
-            REQUEST_QUERY,
-            """
-                Media(id: $scrobblerContentId) {
-                    mediaListEntry { id mediaId status notes score progress }
-                }
-            """,
-        ).getJSONObject("data").getJSONObject("Media").optJSONObject("mediaListEntry")
+        val existing = findListEntry(scrobblerContentId)
         if (existing != null) {
             saveRate(existing, mangaId)
             return false
@@ -216,6 +209,22 @@ class AniListRepository @Inject constructor(
         saveRate(response.getJSONObject("data").getJSONObject("SaveMediaListEntry"), mangaId)
         return true
     }
+
+    override suspend fun refreshRate(mangaId: Long, targetId: Long, mediaType: String): Boolean {
+        val entry = findListEntry(targetId) ?: return false
+        saveRate(entry, mangaId)
+        return true
+    }
+
+    /** The viewer's list entry for media [id], or `null` when it is not on their list. */
+    private suspend fun findListEntry(id: Long): JSONObject? = doRequest(
+        REQUEST_QUERY,
+        """
+            Media(id: $id) {
+                mediaListEntry { id mediaId status notes score progress }
+            }
+        """,
+    ).getJSONObject("data").getJSONObject("Media").optJSONObject("mediaListEntry")
 
     override suspend fun updateRate(rateId: Int, mangaId: Long, chapter: Int) {
         val response = doRequest(

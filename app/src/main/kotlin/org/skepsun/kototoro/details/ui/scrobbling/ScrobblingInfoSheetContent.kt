@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -20,15 +19,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -38,11 +33,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -58,7 +51,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -71,7 +63,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.skepsun.kototoro.R
-import org.skepsun.kototoro.core.ui.adaptive.TvTextButton
 import org.skepsun.kototoro.core.ui.adaptive.tvChipRing
 import org.skepsun.kototoro.core.ui.adaptive.tvIconButtonRing
 import org.skepsun.kototoro.core.ui.compose.KototoroSnackbarHost
@@ -142,7 +133,6 @@ fun ScrobblingInfoSheetContent(
         onEdit = onEdit,
         onUnregister = onUnregister,
         onUpdate = onUpdate,
-        onUpdateProgress = { viewModel.updateTrackingProgress(scrobblerServiceId, it) },
     )
 }
 
@@ -159,7 +149,6 @@ private fun ScrobblingInfoSheetLayout(
     onEdit: (ScrobblerService) -> Unit,
     onUnregister: () -> Unit,
     onUpdate: (Float, ScrobblingStatus?) -> Unit,
-    onUpdateProgress: (Int) -> Unit,
 ) {
     if (scrobbler == null) {
         return
@@ -184,23 +173,11 @@ private fun ScrobblingInfoSheetLayout(
                     .padding(contentPadding)
                     .padding(bottom = 16.dp),
             ) {
-                var isEditingProgress by remember(scrobbler.targetId) { mutableStateOf(false) }
                 ScrobblingHeader(
                     scrobbler = scrobbler,
                     onOpenCover = { onOpenCover(scrobbler) },
                     onUpdate = onUpdate,
-                    onEditProgress = { isEditingProgress = true },
                 )
-                if (isEditingProgress) {
-                    TrackingProgressDialog(
-                        progress = scrobbler.chapter,
-                        onDismissRequest = { isEditingProgress = false },
-                        onConfirm = { progress ->
-                            isEditingProgress = false
-                            if (progress != scrobbler.chapter) onUpdateProgress(progress)
-                        },
-                    )
-                }
                 val description = scrobbler.description?.toString()?.takeIf { it.isNotBlank() }
                     ?: details?.description?.takeIf { it.isNotBlank() }
                 if (!description.isNullOrBlank()) {
@@ -276,44 +253,10 @@ private fun ScrobblingTopBar(
 }
 
 @Composable
-private fun TrackingProgressDialog(
-    progress: Int,
-    onDismissRequest: () -> Unit,
-    onConfirm: (Int) -> Unit,
-) {
-    var text by remember { mutableStateOf(progress.toString()) }
-    // Nine digits keep the value an Int; no tracker counts that many chapters or episodes.
-    val parsed = text.toIntOrNull()
-    AlertDialog(
-        onDismissRequest = onDismissRequest,
-        title = { Text(stringResource(R.string.tracking_progress_edit)) },
-        text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { value -> text = value.filter(Char::isDigit).take(9) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            )
-        },
-        confirmButton = {
-            TextButton(enabled = parsed != null, onClick = { parsed?.let(onConfirm) }) {
-                Text(stringResource(R.string.save))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismissRequest) {
-                Text(stringResource(R.string.cancel))
-            }
-        },
-    )
-}
-
-@Composable
 private fun ScrobblingHeader(
     scrobbler: ScrobblingInfo,
     onOpenCover: () -> Unit,
     onUpdate: (Float, ScrobblingStatus?) -> Unit,
-    onEditProgress: () -> Unit,
 ) {
     val context = LocalContext.current
     val currentStatusOrdinal by rememberUpdatedState(scrobbler.status?.ordinal ?: -1)
@@ -419,19 +362,6 @@ private fun ScrobblingHeader(
                     .fillMaxWidth()
                     .padding(top = 6.dp),
             )
-            TvTextButton(
-                onClick = onEditProgress,
-                modifier = Modifier.padding(top = 2.dp),
-                contentPadding = PaddingValues(horizontal = 4.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Edit,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.tracking_progress_value, scrobbler.chapter))
-            }
         }
     }
 }

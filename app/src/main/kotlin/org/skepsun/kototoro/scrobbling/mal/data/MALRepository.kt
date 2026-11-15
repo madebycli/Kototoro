@@ -374,14 +374,7 @@ class MALRepository @Inject constructor(
         val scrobblerContentId = content.id
         content.mediaType?.let { rememberEndpoint(scrobblerContentId, it) }
         val endpoint = content.mediaType ?: resolvedEndpoint(scrobblerContentId, mangaId, "")
-        val detailsUrl = BASE_API_URL.toHttpUrl().newBuilder()
-            .addPathSegment(endpoint)
-            .addPathSegment(scrobblerContentId.toString())
-            .addQueryParameter("fields", "my_list_status{status,score,${progressField(endpoint)},comments}")
-            .build()
-        val details = okHttp.newCall(Request.Builder().url(detailsUrl).get().build()).await().parseJson()
-        check(details.optLong("id", -1L) == scrobblerContentId) { "Could not read the MAL list entry" }
-        if (details.optJSONObject("my_list_status") != null) {
+        findListStatus(scrobblerContentId, endpoint)?.let { details ->
             saveRate(details, mangaId, scrobblerContentId, endpoint)
             return false
         }
@@ -401,6 +394,28 @@ class MALRepository @Inject constructor(
         val response = okHttp.newCall(request).await().parseJson()
         saveRate(response, mangaId, scrobblerContentId, endpoint)
         return true
+    }
+
+    override suspend fun refreshRate(mangaId: Long, targetId: Long, mediaType: String): Boolean {
+        val endpoint = resolvedEndpoint(targetId, mangaId, mediaType)
+        val details = findListStatus(targetId, endpoint) ?: return false
+        saveRate(details, mangaId, targetId, endpoint)
+        return true
+    }
+
+    /**
+     * The details of [id] with the user's `my_list_status`, or `null` when it is not on their list. Throws when the
+     * entry cannot be read, so a failed lookup is never mistaken for an empty list.
+     */
+    private suspend fun findListStatus(id: Long, endpoint: String): JSONObject? {
+        val url = BASE_API_URL.toHttpUrl().newBuilder()
+            .addPathSegment(endpoint)
+            .addPathSegment(id.toString())
+            .addQueryParameter("fields", "my_list_status{status,score,${progressField(endpoint)},comments}")
+            .build()
+        val details = okHttp.newCall(Request.Builder().url(url).get().build()).await().parseJson()
+        check(details.optLong("id", -1L) == id) { "Could not read the MAL list entry" }
+        return details.takeIf { it.optJSONObject("my_list_status") != null }
     }
 
     override suspend fun updateRate(rateId: Int, mangaId: Long, chapter: Int) {

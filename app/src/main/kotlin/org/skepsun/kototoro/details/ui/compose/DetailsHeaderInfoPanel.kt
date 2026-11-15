@@ -1114,7 +1114,7 @@ internal fun SourceOptionCard(
     }
 }
 
-private fun supportedStatusesForService(service: ScrobblerService): List<ScrobblingStatus> {
+internal fun supportedStatusesForService(service: ScrobblerService): List<ScrobblingStatus> {
     return when (service) {
         ScrobblerService.MAL,
         ScrobblerService.KITSU,

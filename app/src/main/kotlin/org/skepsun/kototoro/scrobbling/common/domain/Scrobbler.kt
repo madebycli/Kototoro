@@ -109,7 +109,20 @@ abstract class Scrobbler(
         }
         val number = resolveAbsoluteChapterNumber(chapters, chapter)
         val entity = resolveScrobblingEntity(manga.id) ?: return
+        // Progress only moves forward: rereading an earlier chapter must not undo what the tracker already counts.
+        if (number <= entity.chapter) return
         repository.updateRate(entity.id, entity.mangaId, number)
+    }
+
+    /**
+     * Reads [mangaId]'s entry from the service again, so progress made elsewhere reaches this device.
+     *
+     * @return `false` when nothing was read: the title is not linked, the service cannot do it, or the entry is no
+     * longer on the user's list.
+     */
+    suspend fun refreshRemoteEntry(mangaId: Long): Boolean {
+        val entity = resolveScrobblingEntity(mangaId) ?: return false
+        return repository.refreshRate(entity.mangaId, entity.targetId, entity.mediaType)
     }
 
     suspend fun updateProgress(mangaId: Long, progress: Int) {

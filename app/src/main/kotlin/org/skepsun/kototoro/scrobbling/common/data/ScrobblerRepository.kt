@@ -33,6 +33,15 @@ interface ScrobblerRepository {
      */
     suspend fun createRate(mangaId: Long, content: ScrobblerContent): Boolean
 
+    /**
+     * Reads the user's current list entry for [targetId] from the service into the local binding of [mangaId], so
+     * changes made on the service's own site show up here.
+     *
+     * @return `false` when the service does not support it or the entry is no longer on the user's list; the local
+     * binding is then left as it was.
+     */
+    suspend fun refreshRate(mangaId: Long, targetId: Long, mediaType: String): Boolean = false
+
     suspend fun updateRate(rateId: Int, mangaId: Long, chapter: Int)
 
     suspend fun updateRate(rateId: Int, mangaId: Long, rating: Float, status: String?, comment: String?)

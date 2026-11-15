@@ -251,7 +251,11 @@ class HistoryRepository @Inject constructor(
                 ),
             )
             newChaptersUseCaseProvider.get()(manga, chapterId, percent)
-            scrobblers.forEach { it.tryScrobble(manga, chapterId) }
+            if (settings.isTrackingProgressSyncEnabled) {
+                // Tracker bindings belong to the stored title, which can differ from the one the reader opened.
+                val scrobbled = if (storedManga.id == manga.id) manga else manga.copy(id = storedManga.id)
+                scrobblers.forEach { it.tryScrobble(scrobbled, chapterId) }
+            }
         }
     }
 

@@ -4226,4 +4226,17 @@
     <string name="tracking_progress_edit">Progress</string>
     <string name="tracking_score_value">Your score: %1$s</string>
     <string name="tracking_community_score_value">Community: %1$s</string>
+    <string name="tracking_progress_sync">Sync reading progress</string>
+    <string name="tracking_progress_sync_summary">Chapters a tracker counts as read are marked read here, and chapters you read here are reported to the tracker. Progress never moves back.</string>
+    <string name="tracking_status">Status</string>
+    <string name="tracking_score">Your score</string>
+    <string name="tracking_sync_now">Sync now</string>
+    <string name="tracking_open_details">View details</string>
+    <string name="tracking_change_link">Change entry</string>
+    <string name="tracking_unlink">Unlink</string>
+    <string name="tracking_progress_of">of %1$d chapters here</string>
+    <string name="tracking_progress_chapters">chapters read</string>
+    <string name="tracking_sync_pulled">Read progress taken over from %1$s</string>
+    <string name="tracking_sync_pushed">Read progress sent to %1$s</string>
+    <string name="tracking_sync_unchanged">Already in sync with %1$s</string>
 </resources>

@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.fragment.app.FragmentActivity
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -38,10 +39,8 @@ interface ScrobblingInfoSheetEntryPoint {
 @Composable
 fun ScrobblingInfoSheetRoute(
     scrobblerServiceId: Int,
-    // The details screen's own model: modals render at activity level, where hiltViewModel() would hand out a
-    // different instance than the one a navigation entry owns.
-    viewModel: DetailsViewModel,
     onDismissRequest: () -> Unit,
+    viewModel: DetailsViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
     val anchor = LocalView.current
@@ -91,9 +90,9 @@ fun ScrobblingInfoSheetRoute(
                         router?.openExternalBrowser(url, context.getString(R.string.open_in_browser)) ?: false
                     },
                     onEdit = { service ->
-                        viewModel.prepareTrackingContent { manga ->
+                        viewModel.manga.value?.let { manga ->
                             onDismissRequest()
-                            router?.showScrobblingSelectorSheet(manga, service, addToFavourites = false)
+                            router?.showScrobblingSelectorSheet(manga, service)
                         }
                     },
                     onUnregister = {
