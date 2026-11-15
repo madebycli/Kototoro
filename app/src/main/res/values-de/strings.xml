@@ -4107,4 +4107,7 @@
     <string name="tracking_sync_pulled_auto">Lesefortschritt vom Tracker übernommen</string>
     <string name="tracking_progress_of_episodes">von %1$d Folgen hier</string>
     <string name="tracking_progress_episodes">Folgen gesehen</string>
+    <string name="tracking_short">Tracking</string>
+    <string name="tracking_search_on">Auf %1$s suchen</string>
+    <string name="tracking_link_action">Verknüpfen</string>
 </resources>

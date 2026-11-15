@@ -65,7 +65,7 @@ internal fun DetailsTrackingSheet(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Text(
-                        text = stringResource(R.string.tracking),
+                        text = stringResource(R.string.tracking_short),
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
                     )
                     Text(

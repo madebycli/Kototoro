@@ -107,6 +107,9 @@ class ScrobblingSelectorViewModel @Inject constructor(
     val onClose = MutableEventFlow<Unit>()
     private val searchQuery = MutableStateFlow(initialManga?.title.orEmpty())
 
+    /** The text the current results were searched for; the title until the user searches for something else. */
+    val query: StateFlow<String> = searchQuery
+
     val isEmpty: Boolean
         get() = scrobblerContentList.value.isEmpty()
 

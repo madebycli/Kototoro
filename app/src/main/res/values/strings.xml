@@ -4242,4 +4242,7 @@
     <string name="tracking_sync_pulled_auto">Read progress taken over from your tracker</string>
     <string name="tracking_progress_of_episodes">of %1$d episodes here</string>
     <string name="tracking_progress_episodes">episodes watched</string>
+    <string name="tracking_short">Tracking</string>
+    <string name="tracking_search_on">Search on %1$s</string>
+    <string name="tracking_link_action">Link</string>
 </resources>
