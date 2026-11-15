@@ -139,6 +139,7 @@ import org.skepsun.kototoro.details.ui.model.EntityRelationSection
 import org.skepsun.kototoro.details.ui.model.EntityRelationItem
 import org.skepsun.kototoro.tracking.discovery.domain.EntityType
 import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblerService
+import org.skepsun.kototoro.scrobbling.common.ui.selector.INDEPENDENT_TRACKING_SERVICES
 import org.skepsun.kototoro.details.ui.model.DetailsSupplementAction
 import org.skepsun.kototoro.filter.ui.model.UiTagGroup
 import org.skepsun.kototoro.search.domain.ALL_SEARCH_CONTENT_KINDS
@@ -2503,7 +2504,10 @@ class DetailsViewModel @Inject constructor(
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     private val linkedCommunityScores = scrobblingInfo
-        .map { items -> items.map { it.scrobbler to it.targetId }.distinct() }
+        .map { items ->
+            items.filter { it.scrobbler in INDEPENDENT_TRACKING_SERVICES }
+                .map { it.scrobbler to it.targetId }.distinct()
+        }
         .distinctUntilChanged()
         .mapLatest { keys ->
             supervisorScope {
