@@ -130,7 +130,7 @@ fun ScrobblingSelectorDialog(
         if (showServiceTabs) {
             ScrobblerTabs(viewModel)
         }
-        if (requiresLogin && service != null) {
+        if (requiresLogin) {
             Text(
                 text = stringResource(R.string.scrobbler_search_auth_hint, stringResource(service.titleResId)),
                 style = MaterialTheme.typography.bodySmall,
