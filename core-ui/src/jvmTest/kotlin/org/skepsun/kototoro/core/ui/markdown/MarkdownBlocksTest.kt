@@ -88,6 +88,53 @@ class MarkdownBlocksTest {
     }
 
     @Test
+    fun `description emphasis needs flanking so arithmetic and stray stars stay literal`() {
+        assertEquals(
+            listOf(MarkdownSpan.Text("5 * 3 * 2 and ** spaced ** stay")),
+            parseMarkdownInline("5 * 3 * 2 and ** spaced ** stay", descriptionMode = true),
+        )
+        assertEquals(
+            listOf(
+                MarkdownSpan.Text("Year:", bold = true),
+                MarkdownSpan.Text(" 2024, "),
+                MarkdownSpan.Text("ongoing", italic = true),
+            ),
+            parseMarkdownInline("**Year:** 2024, *ongoing*", descriptionMode = true),
+        )
+    }
+
+    @Test
+    fun `description urls stop before unbalanced brackets punctuation and cjk text`() {
+        assertEquals(
+            listOf(
+                MarkdownSpan.Text("(see "),
+                MarkdownSpan.Link("https://example.org/a_(b)", "https://example.org/a_(b)"),
+                MarkdownSpan.Text(".) ["),
+                MarkdownSpan.Link("https://example.org/c", "https://example.org/c"),
+                MarkdownSpan.Text("] 官网："),
+                MarkdownSpan.Link("https://example.org/d?x=1&y=2", "https://example.org/d?x=1&y=2"),
+                MarkdownSpan.Text("。更多"),
+            ),
+            parseMarkdownInline(
+                "(see https://example.org/a_(b).) [https://example.org/c] 官网：https://example.org/d?x=1&y=2。更多",
+                descriptionMode = true,
+            ),
+        )
+        assertEquals(
+            listOf(MarkdownSpan.Text("https:// alone")),
+            parseMarkdownInline("https:// alone", descriptionMode = true),
+        )
+    }
+
+    @Test
+    fun `release note parsing keeps its previous behaviour outside description mode`() {
+        assertEquals(
+            listOf(MarkdownSpan.Text("See https://example.org and "), MarkdownSpan.Text("tags", bold = true)),
+            parseMarkdownInline("See https://example.org and <b>**tags**</b>"),
+        )
+    }
+
+    @Test
     fun `blank lines separate paragraphs`() {
         val blocks = parseMarkdownBlocks("one\n\ntwo\n\n\ntwo follows")
 
