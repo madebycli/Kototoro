@@ -107,6 +107,7 @@ import org.skepsun.kototoro.parsers.model.ContentSource
 import org.skepsun.kototoro.parsers.model.ContentTag
 import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblingStatus
 import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblerService
+import org.skepsun.kototoro.scrobbling.common.ui.selector.INDEPENDENT_TRACKING_SERVICES
 import org.skepsun.kototoro.parsers.model.ContentType
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -251,7 +252,7 @@ fun DetailsHeader(
             ?.let { String.format(defaultLocale, "%.1f", it.rating * 10f) }
     }
     val communityTracking = linkedTrackingItems
-        .filter { it.hasScrobblingBinding && it.communityScore != null }
+        .filter { it.hasScrobblingBinding && it.communityScore != null && it.service in INDEPENDENT_TRACKING_SERVICES }
         .sortedByDescending { it.isPreferred }
         .firstOrNull()
     val trackingLabel = communityTracking?.let {

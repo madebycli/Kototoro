@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import org.skepsun.kototoro.R
 import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblerService
 import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblingInfo
+import org.skepsun.kototoro.scrobbling.common.ui.selector.INDEPENDENT_TRACKING_SERVICES
 
 @Composable
 internal fun TrackingDialog(
@@ -27,17 +28,18 @@ internal fun TrackingDialog(
     onOpen: (ScrobblerService) -> Unit,
 ) {
     val statuses = stringArrayResource(R.array.scrobbling_statuses)
+    val supportedEntries = entries.filter { it.scrobbler in INDEPENDENT_TRACKING_SERVICES }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.tracking)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(stringResource(R.string.tracking_supported_services), style = MaterialTheme.typography.bodySmall)
-                if (entries.isEmpty()) Text(
+                if (supportedEntries.isEmpty()) Text(
                     stringResource(R.string.tracking_no_links),
                     modifier = Modifier.padding(top = 12.dp),
                 )
-                entries.forEach { entry ->
+                supportedEntries.forEach { entry ->
                     Column(Modifier.fillMaxWidth().clickable { onOpen(entry.scrobbler) }.padding(vertical = 12.dp)) {
                         Text(stringResource(entry.scrobbler.titleResId), style = MaterialTheme.typography.titleMedium)
                         Text(entry.title, style = MaterialTheme.typography.bodyMedium)
