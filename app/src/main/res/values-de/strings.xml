@@ -4084,4 +4084,9 @@
     <string name="kitsu_status_unreleased">Unveröffentlicht</string>
     <string name="migration_health_banner_disable">Nicht mehr anzeigen</string>
     <string name="migration_health_banner_setting">Defekte Quellen warnen</string>
+    <string name="tracking_no_links">Noch keine Tracking-Dienste verknüpft.</string>
+    <string name="tracking_add">Tracking-Dienst verknüpfen</string>
+    <string name="tracking_progress_value">Fortschritt: %1$d</string>
+    <string name="tracking_progress_edit">Fortschritt</string>
+    <string name="tracking_score_value">Bewertung: %1$d%%</string>
 </resources>

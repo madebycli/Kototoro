@@ -268,6 +268,8 @@ private fun DetailsScreenContent(
     isTemporaryReadOnly: Boolean = false,
 ) {
     val detailsScreenState = rememberDetailsScreenState()
+    var showTrackingDialog by remember { mutableStateOf(false) }
+    val trackingEntries by viewModel.scrobblingInfo.collectAsStateWithLifecycle()
     val showDeleteLocalDialog by detailsScreenState.showDeleteLocalDialog
     val showShareOptions by detailsScreenState.showShareOptions
     val pendingAuthorSearch by detailsScreenState.pendingAuthorSearch
@@ -884,11 +886,27 @@ private fun DetailsScreenContent(
             }
         }
     }
+    if (showTrackingDialog) {
+        TrackingDialog(
+            entries = trackingEntries,
+            onDismiss = { showTrackingDialog = false },
+            onAdd = {
+                showTrackingDialog = false
+                viewModel.prepareTrackingContent { appRouter.showScrobblingSelectorSheet(it, null) }
+            },
+            onOpen = { service ->
+                showTrackingDialog = false
+                appRouter.showScrobblingInfoSheet(service)
+            },
+        )
+    }
+
     val handleActionClick: (DetailsAction) -> Unit = handleDetailsAction@{ action ->
         if (!isWorkActionEnabled && action.isWorkOnlyAction()) {
             return@handleDetailsAction
         }
         when (action) {
+            DetailsAction.OpenTracking -> { showTrackingDialog = true }
             DetailsAction.ToggleList -> {
                 openPaneTab(DETAILS_TAB_CHAPTERS)
             }

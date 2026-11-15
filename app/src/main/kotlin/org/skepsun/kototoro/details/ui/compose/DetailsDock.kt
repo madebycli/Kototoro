@@ -1233,6 +1233,7 @@ internal fun DetailsDockActionButton(
 }
 
 sealed interface DetailsAction {
+    data object OpenTracking : DetailsAction
     data object OpenCover : DetailsAction
     data class OpenContent(val content: Content) : DetailsAction
     data class OpenSource(val source: ContentSource) : DetailsAction
@@ -1299,6 +1300,7 @@ sealed interface DetailsAction {
 
 internal fun DetailsAction.isWorkOnlyAction(): Boolean = when (this) {
     is DetailsAction.SelectBranch,
+    DetailsAction.OpenTracking,
     DetailsAction.ManageCategories,
     DetailsAction.ManageDownloads,
     DetailsAction.Favorite,

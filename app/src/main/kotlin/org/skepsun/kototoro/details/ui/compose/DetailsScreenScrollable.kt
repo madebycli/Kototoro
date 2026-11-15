@@ -295,6 +295,7 @@ internal fun DetailsScrollableContent(
             onInfoCardBoundsSync = onInfoCardBoundsSync,
             onCoverClick = { onActionClick(DetailsAction.OpenCover) },
             onFavoriteClick = onFavoriteClick,
+            onTrackingClick = { onActionClick(DetailsAction.OpenTracking) },
             onSourceClick = { onActionClick(DetailsAction.OpenSource(it)) },
             onTrackingSourceClick = { option ->
                 option.trackingService?.let { service ->

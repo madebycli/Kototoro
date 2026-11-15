@@ -17,6 +17,9 @@ class AniListScrobbler @Inject constructor(
     mangaRepositoryFactory: ContentRepository.Factory,
 ) : Scrobbler(db, ScrobblerService.ANILIST, repository, mangaRepositoryFactory) {
 
+    // createRate stores the entry returned by AniList, including any existing list state.
+    override val preservesRemoteStateOnBinding: Boolean = true
+
     init {
         statuses[ScrobblingStatus.PLANNED] = "PLANNING"
         statuses[ScrobblingStatus.READING] = "CURRENT"

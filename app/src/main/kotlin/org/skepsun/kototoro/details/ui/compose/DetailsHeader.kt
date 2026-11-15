@@ -177,6 +177,7 @@ fun DetailsHeader(
     onInfoCardBoundsSync: (Float, Float) -> Unit,
     onCoverClick: (String?) -> Unit,
     onFavoriteClick: () -> Unit,
+    onTrackingClick: () -> Unit,
     onSourceClick: (ContentSource) -> Unit,
     onTrackingSourceClick: (DetailsSourceOption) -> Unit,
     onOpenTrackingDiscover: (ScrobblerService) -> Unit,
@@ -524,6 +525,10 @@ fun DetailsHeader(
                             buttonSize = 36.dp,
                             iconSize = 18.dp,
                         )
+                        SuggestionChip(
+                            onClick = onTrackingClick,
+                            label = { Text(stringResource(R.string.tracking)) },
+                        )
                         RatingStatusChip(
                             rating = unifiedRating,
                             canEditRating = canEditUnifiedRating,
@@ -683,6 +688,10 @@ fun DetailsHeader(
                             filled = isFavourite,
                             buttonSize = 32.dp,
                             iconSize = 17.dp,
+                        )
+                        SuggestionChip(
+                            onClick = onTrackingClick,
+                            label = { Text(stringResource(R.string.tracking)) },
                         )
                         RatingStatusChip(
                             rating = unifiedRating,
@@ -878,6 +887,10 @@ fun DetailsHeader(
                         )
                     }
                     if (showWorkActions) {
+                        SuggestionChip(
+                            onClick = onTrackingClick,
+                            label = { Text(stringResource(R.string.tracking)) },
+                        )
                         RatingStatusChip(
                             rating = unifiedRating,
                             canEditRating = canEditUnifiedRating,

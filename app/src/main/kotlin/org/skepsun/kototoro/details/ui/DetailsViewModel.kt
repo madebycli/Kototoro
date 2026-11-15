@@ -2505,7 +2505,7 @@ class DetailsViewModel @Inject constructor(
         observedTrackingLinks,
         scrobblingInfo,
     ) { links, scrobblingItems ->
-        links.mapNotNull { link ->
+        val linkedItems = links.mapNotNull { link ->
             val service = org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblerService.entries
                 .firstOrNull { it.id == link.service }
                 ?: return@mapNotNull null
@@ -2524,6 +2524,22 @@ class DetailsViewModel @Inject constructor(
                 rating = scrobbling?.rating,
                 hasScrobblingBinding = scrobbling != null,
                 isPreferred = service == settings.preferredTrackingSite,
+            )
+        }
+        linkedItems + scrobblingItems.filter { info ->
+            linkedItems.none { it.service == info.scrobbler && it.remoteId == info.targetId }
+        }.map { info ->
+            LinkedTrackingItemUiModel(
+                service = info.scrobbler,
+                remoteId = info.targetId,
+                title = info.title,
+                coverUrl = info.coverUrl,
+                summary = info.description?.toString(),
+                url = info.externalUrl,
+                status = info.status,
+                rating = info.rating,
+                hasScrobblingBinding = true,
+                isPreferred = info.scrobbler == settings.preferredTrackingSite,
             )
         }
     }.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, emptyList())
@@ -3644,12 +3660,32 @@ class DetailsViewModel @Inject constructor(
         val scrobbler = getScrobbler(scrobblerServiceId) ?: return
         launchJob(Dispatchers.Default) {
             val currentMangaId = resolveCurrentLocalMangaId() ?: return@launchJob
+            val current = scrobbler.getScrobblingInfoOrNull(currentMangaId)
             scrobbler.updateScrobblingInfo(
                 mangaId = currentMangaId,
                 rating = rating,
                 status = status,
-                comment = null,
+                comment = current?.comment,
             )
+        }
+    }
+
+    fun prepareTrackingContent(onReady: (Content) -> Unit) {
+        launchJob(Dispatchers.Main) {
+            val content = withContext(Dispatchers.IO) {
+                val id = ensureCurrentWorkContent() ?: return@withContext null
+                dataRepository.findPreferredLocalContentById(id, withChapters = true)
+                    ?: dataRepository.findContentById(id, withChapters = true)
+            }
+            if (content != null) onReady(content)
+        }
+    }
+
+    fun updateTrackingProgress(scrobblerServiceId: Int, progress: Int) {
+        val scrobbler = getScrobbler(scrobblerServiceId) ?: return
+        launchJob(Dispatchers.IO) {
+            val currentMangaId = resolveCurrentLocalMangaId() ?: return@launchJob
+            scrobbler.updateProgress(currentMangaId, progress)
         }
     }
 

@@ -4219,4 +4219,9 @@
     <string name="details_view_catalog">View catalog</string>
     <string name="details_my_reading">My reading</string>
     <string name="details_not_started">Not started</string>
+    <string name="tracking_no_links">No tracking services linked yet.</string>
+    <string name="tracking_add">Link tracking service</string>
+    <string name="tracking_progress_value">Progress: %1$d</string>
+    <string name="tracking_progress_edit">Progress</string>
+    <string name="tracking_score_value">Score: %1$d%%</string>
 </resources>

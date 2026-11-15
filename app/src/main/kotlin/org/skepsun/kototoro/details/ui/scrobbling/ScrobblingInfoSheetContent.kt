@@ -24,6 +24,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -133,6 +138,7 @@ fun ScrobblingInfoSheetContent(
         onEdit = onEdit,
         onUnregister = onUnregister,
         onUpdate = onUpdate,
+        onUpdateProgress = { viewModel.updateTrackingProgress(scrobblerServiceId, it) },
     )
 }
 
@@ -149,6 +155,7 @@ private fun ScrobblingInfoSheetLayout(
     onEdit: (ScrobblerService) -> Unit,
     onUnregister: () -> Unit,
     onUpdate: (Float, ScrobblingStatus?) -> Unit,
+    onUpdateProgress: (Int) -> Unit,
 ) {
     if (scrobbler == null) {
         return
@@ -178,6 +185,33 @@ private fun ScrobblingInfoSheetLayout(
                     onOpenCover = { onOpenCover(scrobbler) },
                     onUpdate = onUpdate,
                 )
+                var editProgress by remember(scrobbler.targetId) { mutableStateOf(false) }
+                TextButton(onClick = { editProgress = true }, modifier = Modifier.padding(horizontal = 16.dp)) {
+                    Text(stringResource(R.string.tracking_progress_value, scrobbler.chapter))
+                }
+                if (editProgress) {
+                    var progress by remember(scrobbler.targetId) { mutableStateOf(scrobbler.chapter.toString()) }
+                    val parsed = progress.toIntOrNull()?.takeIf { it >= 0 }
+                    AlertDialog(
+                        onDismissRequest = { editProgress = false },
+                        title = { Text(stringResource(R.string.tracking_progress_edit)) },
+                        text = {
+                            OutlinedTextField(
+                                value = progress,
+                                onValueChange = { progress = it.filter(Char::isDigit) },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(enabled = parsed != null, onClick = {
+                                parsed?.let { onUpdateProgress(it) }
+                                editProgress = false
+                            }) { Text(stringResource(R.string.save)) }
+                        },
+                        dismissButton = { TextButton(onClick = { editProgress = false }) { Text(stringResource(R.string.cancel)) } },
+                    )
+                }
                 val description = scrobbler.description?.toString()?.takeIf { it.isNotBlank() }
                     ?: details?.description?.takeIf { it.isNotBlank() }
                 if (!description.isNullOrBlank()) {
