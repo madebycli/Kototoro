@@ -1,6 +1,7 @@
 package org.skepsun.kototoro.scrobbling.common.domain
 
 import org.skepsun.kototoro.core.prefs.AppSettings
+import org.skepsun.kototoro.core.ui.util.ReversibleHandle
 import org.skepsun.kototoro.core.util.ext.printStackTraceDebug
 import org.skepsun.kototoro.details.domain.calculateGroupedChapterProgress
 import org.skepsun.kototoro.history.data.HistoryRepository
@@ -29,6 +30,17 @@ class TrackerProgressSync @Inject constructor(
 
     enum class Result { UNCHANGED, PULLED, PUSHED }
 
+    /** Which side a sync may change. */
+    enum class Direction {
+        BOTH,
+
+        /** Only the local read state; used after the user set the tracker's progress by hand, even lower. */
+        PULL_ONLY,
+    }
+
+    /** What a sync did; [undo] restores the local read state a pull replaced. */
+    class Outcome(val result: Result, val undo: ReversibleHandle? = null)
+
     /**
      * Reconciles [manga] with [scrobbler]'s entry. [manga] must be the stored title the entry is bound to, with its
      * chapters. With [refresh] the entry is read from the service first; [preferredBranch] picks the translation to
@@ -39,13 +51,14 @@ class TrackerProgressSync @Inject constructor(
         manga: Content,
         preferredBranch: String? = null,
         refresh: Boolean = true,
-    ): Result {
-        if (!settings.isTrackingProgressSyncEnabled) return Result.UNCHANGED
-        val chapters = manga.chapters?.takeIf { it.isNotEmpty() } ?: return Result.UNCHANGED
+        direction: Direction = Direction.BOTH,
+    ): Outcome {
+        if (!settings.isTrackingProgressSyncEnabled) return NO_CHANGE
+        val chapters = manga.chapters?.takeIf { it.isNotEmpty() } ?: return NO_CHANGE
         if (refresh) {
             runCatchingCancellable { scrobbler.refreshRemoteEntry(manga.id) }.onFailure { it.printStackTraceDebug() }
         }
-        val info = scrobbler.getScrobblingInfoOrNull(manga.id) ?: return Result.UNCHANGED
+        val info = scrobbler.getScrobblingInfoOrNull(manga.id) ?: return NO_CHANGE
         val trackingChapters = chapters.map { it.toTrackingChapter() }
         val readThrough = localReadThrough(manga, chapters, preferredBranch)
         val localNumber = readThrough?.let { resolveAbsoluteChapterNumber(trackingChapters, it.toTrackingChapter()) } ?: 0
@@ -54,12 +67,13 @@ class TrackerProgressSync @Inject constructor(
                 val branch = readThrough?.branch ?: chapters.preferredBranch(preferredBranch)
                 val target = chapterCoveredByTrackerProgress(trackingChapters, branch, info.chapter)
                     ?.let { chapters.findById(it.id) }
-                    ?: return Result.UNCHANGED
+                    ?: return NO_CHANGE
                 if (resolveAbsoluteChapterNumber(trackingChapters, target.toTrackingChapter()) <= localNumber) {
-                    return Result.UNCHANGED
+                    return NO_CHANGE
                 }
                 val progress = calculateGroupedChapterProgress(chapters, target.id, chapterPercent = 1f)
-                    ?: return Result.UNCHANGED
+                    ?: return NO_CHANGE
+                val undo = historyRepository.undoHandleFor(manga.id)
                 // The same write the reader makes, so the chapter list greys out everything up to the target.
                 historyRepository.addOrUpdate(
                     manga = manga,
@@ -69,15 +83,15 @@ class TrackerProgressSync @Inject constructor(
                     percent = progress.percent,
                     force = true,
                 )
-                Result.PULLED
+                Outcome(Result.PULLED, undo)
             }
 
-            readThrough != null && localNumber > info.chapter -> {
+            direction == Direction.BOTH && readThrough != null && localNumber > info.chapter -> {
                 scrobbler.scrobble(manga, readThrough.id)
-                Result.PUSHED
+                Outcome(Result.PUSHED)
             }
 
-            else -> Result.UNCHANGED
+            else -> NO_CHANGE
         }
     }
 
@@ -98,6 +112,10 @@ class TrackerProgressSync @Inject constructor(
         val current = chapters.findById(history.chapterId)
         val readThrough = chapterReadThrough(current?.toOrder(), furthest?.toOrder()) ?: return null
         return chapters.findById(readThrough.id)
+    }
+
+    private companion object {
+        val NO_CHANGE = Outcome(Result.UNCHANGED)
     }
 
     private fun List<ContentChapter>.preferredBranch(preferred: String?): String? =

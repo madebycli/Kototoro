@@ -259,6 +259,24 @@ class HistoryRepository @Inject constructor(
         }
     }
 
+    /**
+     * A handle that puts [mangaId]'s history back exactly as it is now, tombstone and furthest chapter included, to
+     * undo a write made after this call. A title without history loses the one that write created.
+     */
+    suspend fun undoHandleFor(mangaId: Long): ReversibleHandle {
+        val previous = db.getHistoryDao().findIncludingDeleted(mangaId)
+        return ReversibleHandle {
+            db.withTransaction {
+                if (previous == null) {
+                    db.getHistoryDao().delete(mangaId)
+                } else {
+                    db.getHistoryDao().upsertSync(previous)
+                    db.getHistoryDao().setFurthestChapter(mangaId, previous.furthestChapterId)
+                }
+            }
+        }
+    }
+
     suspend fun getOne(manga: Content): ContentHistory? {
         val entity = db.getHistoryDao().find(manga.id)?.takeIf { it.deletedAt == 0L }
         val recovered = entity?.recoverIfNeeded(manga)

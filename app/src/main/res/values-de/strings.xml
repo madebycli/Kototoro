@@ -4104,4 +4104,7 @@
     <string name="tracking_sync_pulled">Lesefortschritt von %1$s übernommen</string>
     <string name="tracking_sync_pushed">Lesefortschritt an %1$s gesendet</string>
     <string name="tracking_sync_unchanged">Bereits synchron mit %1$s</string>
+    <string name="tracking_sync_pulled_auto">Lesefortschritt vom Tracker übernommen</string>
+    <string name="tracking_progress_of_episodes">von %1$d Folgen hier</string>
+    <string name="tracking_progress_episodes">Folgen gesehen</string>
 </resources>

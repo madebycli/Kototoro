@@ -3745,8 +3745,8 @@ class DetailsViewModel @Inject constructor(
         launchJob(Dispatchers.Default) {
             val mangaId = resolveCurrentLocalMangaId() ?: return@launchJob
             val content = loadTrackingContent(mangaId) ?: return@launchJob
-            val result = trackerProgressSync.sync(scrobbler, content, preferredBranch = selectedBranch.value)
-            withContext(Dispatchers.Main) { onDone(result) }
+            val outcome = trackerProgressSync.sync(scrobbler, content, preferredBranch = selectedBranch.value)
+            withContext(Dispatchers.Main) { onDone(outcome.result) }
         }
     }
 
@@ -3759,6 +3759,11 @@ class DetailsViewModel @Inject constructor(
             if (!syncedTrackerEntries.add(key)) continue
             runCatchingCancellable {
                 trackerProgressSync.sync(scrobbler, content, preferredBranch = selectedBranch.value)
+            }.onSuccess { outcome ->
+                // Chapters greying out on their own would be a surprise: say where they came from, and offer undo.
+                if (outcome.result == TrackerProgressSync.Result.PULLED) {
+                    onActionDone.call(ReversibleAction(R.string.tracking_sync_pulled_auto, outcome.undo))
+                }
             }.onFailure { it.printStackTraceDebug() }
         }
     }
@@ -3781,6 +3786,15 @@ class DetailsViewModel @Inject constructor(
         launchJob(Dispatchers.Default) {
             val currentMangaId = resolveCurrentLocalMangaId() ?: return@launchJob
             scrobbler.updateProgress(currentMangaId, progress)
+            // Raising it by hand marks those chapters read here too; lowering it is left as the user set it.
+            val content = loadTrackingContent(currentMangaId) ?: return@launchJob
+            trackerProgressSync.sync(
+                scrobbler = scrobbler,
+                manga = content,
+                preferredBranch = selectedBranch.value,
+                refresh = false,
+                direction = TrackerProgressSync.Direction.PULL_ONLY,
+            )
         }
     }
 

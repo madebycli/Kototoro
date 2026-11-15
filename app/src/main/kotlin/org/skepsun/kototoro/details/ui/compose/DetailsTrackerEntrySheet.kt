@@ -88,6 +88,7 @@ internal fun DetailsTrackerEntrySheet(
     entry: ScrobblingInfo,
     communityScore: Float?,
     totalChapters: Int?,
+    countsEpisodes: Boolean,
     onDismissRequest: () -> Unit,
     onStatusChange: (ScrobblingStatus) -> Unit,
     onScoreChange: (Float) -> Unit,
@@ -135,6 +136,7 @@ internal fun DetailsTrackerEntrySheet(
                 TrackerProgressControl(
                     progress = entry.chapter,
                     total = totalChapters?.takeIf { it > 0 },
+                    countsEpisodes = countsEpisodes,
                     onProgressChange = onProgressChange,
                 )
             }
@@ -245,6 +247,7 @@ private fun TrackerSection(title: String, content: @Composable () -> Unit) {
 private fun TrackerProgressControl(
     progress: Int,
     total: Int?,
+    countsEpisodes: Boolean,
     onProgressChange: (Int) -> Unit,
 ) {
     var draft by remember(progress) { mutableIntStateOf(progress) }
@@ -281,8 +284,12 @@ private fun TrackerProgressControl(
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    text = total?.let { stringResource(R.string.tracking_progress_of, it) }
-                        ?: stringResource(R.string.tracking_progress_chapters),
+                    text = when {
+                        total != null && countsEpisodes -> stringResource(R.string.tracking_progress_of_episodes, total)
+                        total != null -> stringResource(R.string.tracking_progress_of, total)
+                        countsEpisodes -> stringResource(R.string.tracking_progress_episodes)
+                        else -> stringResource(R.string.tracking_progress_chapters)
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -2202,6 +2202,7 @@ private fun DetailsScreenContent(
                             it.service == service && it.remoteId == entry.targetId
                         }?.communityScore,
                         totalChapters = historyInfo.totalChapters.takeIf { it > 0 },
+                        countsEpisodes = contentType == ContentType.VIDEO || contentType == ContentType.HENTAI_VIDEO,
                         onDismissRequest = { trackerEntryService = null },
                         onStatusChange = { status -> viewModel.updateScrobbling(service.id, entry.rating, status) },
                         onScoreChange = { rating -> viewModel.updateScrobbling(service.id, rating, entry.status) },

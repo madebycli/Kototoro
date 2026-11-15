@@ -112,6 +112,19 @@ abstract class Scrobbler(
         // Progress only moves forward: rereading an earlier chapter must not undo what the tracker already counts.
         if (number <= entity.chapter) return
         repository.updateRate(entity.id, entity.mangaId, number)
+        // Reading a planned title starts it, as Mihon-style trackers do; finished or paused entries keep their status.
+        val status = resolveStatus(entity.status)
+        if (status == null || status == ScrobblingStatus.PLANNED) {
+            runCatchingCancellable {
+                val updated = resolveScrobblingEntity(manga.id) ?: entity
+                updateScrobblingInfo(
+                    mangaId = manga.id,
+                    rating = updated.rating,
+                    status = ScrobblingStatus.READING,
+                    comment = updated.comment,
+                )
+            }.onFailure { it.printStackTraceDebug() }
+        }
     }
 
     /**

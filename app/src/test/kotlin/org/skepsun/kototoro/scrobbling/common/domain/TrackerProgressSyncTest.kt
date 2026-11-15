@@ -6,6 +6,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
 import org.skepsun.kototoro.core.model.ContentHistory
 import org.skepsun.kototoro.core.model.TestContentSource
@@ -58,7 +59,7 @@ class TrackerProgressSyncTest {
         remote(chapter = 7)
         local(chapterId = 3)
 
-        assertEquals(TrackerProgressSync.Result.PULLED, sync.sync(scrobbler, manga))
+        assertEquals(TrackerProgressSync.Result.PULLED, sync.sync(scrobbler, manga).result)
 
         coVerify { scrobbler.refreshRemoteEntry(55) }
         coVerify {
@@ -73,7 +74,7 @@ class TrackerProgressSyncTest {
         // Reopened chapter 4 after reading up to 9: chapters up to 9 still count as read.
         local(chapterId = 4, furthestChapterId = 9)
 
-        assertEquals(TrackerProgressSync.Result.PUSHED, sync.sync(scrobbler, manga, refresh = false))
+        assertEquals(TrackerProgressSync.Result.PUSHED, sync.sync(scrobbler, manga, refresh = false).result)
 
         coVerify { scrobbler.scrobble(manga, 9) }
         coVerify(exactly = 0) { scrobbler.refreshRemoteEntry(any()) }
@@ -85,7 +86,7 @@ class TrackerProgressSyncTest {
         remote(chapter = 25)
         coEvery { history.getOne(manga) } returns null
 
-        assertEquals(TrackerProgressSync.Result.PULLED, sync.sync(scrobbler, manga))
+        assertEquals(TrackerProgressSync.Result.PULLED, sync.sync(scrobbler, manga).result)
 
         coVerify { history.addOrUpdate(manga, 10, 0, 0, 1f, true, any(), any()) }
     }
@@ -94,14 +95,29 @@ class TrackerProgressSyncTest {
     fun `equal progress and a disabled setting change nothing`() = runBlocking {
         remote(chapter = 5)
         local(chapterId = 5)
-        assertEquals(TrackerProgressSync.Result.UNCHANGED, sync.sync(scrobbler, manga))
+        assertEquals(TrackerProgressSync.Result.UNCHANGED, sync.sync(scrobbler, manga).result)
 
         every { settings.isTrackingProgressSyncEnabled } returns false
         remote(chapter = 9)
-        assertEquals(TrackerProgressSync.Result.UNCHANGED, sync.sync(scrobbler, manga))
+        assertEquals(TrackerProgressSync.Result.UNCHANGED, sync.sync(scrobbler, manga).result)
 
         coVerify(exactly = 0) { history.addOrUpdate(any(), any(), any(), any(), any(), any(), any(), any()) }
         coVerify(exactly = 0) { scrobbler.scrobble(any(), any()) }
+    }
+
+    @Test
+    fun `a pull can be undone and pull only never writes to the tracker`() = runBlocking {
+        remote(chapter = 2)
+        local(chapterId = 6)
+        val pushless = sync.sync(scrobbler, manga, direction = TrackerProgressSync.Direction.PULL_ONLY)
+        assertEquals(TrackerProgressSync.Result.UNCHANGED, pushless.result)
+        coVerify(exactly = 0) { scrobbler.scrobble(any(), any()) }
+
+        remote(chapter = 8)
+        val pulled = sync.sync(scrobbler, manga, direction = TrackerProgressSync.Direction.PULL_ONLY)
+        assertEquals(TrackerProgressSync.Result.PULLED, pulled.result)
+        assertNotNull(pulled.undo)
+        coVerify { history.undoHandleFor(55) }
     }
 
     private fun remote(chapter: Int) {
