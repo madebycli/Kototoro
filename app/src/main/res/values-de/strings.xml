@@ -4110,4 +4110,6 @@
     <string name="tracking_short">Tracking</string>
     <string name="tracking_search_on">Auf %1$s suchen</string>
     <string name="tracking_link_action">Verknüpfen</string>
+    <string name="tracking_search_hint">Titel, Link oder id:123</string>
+    <string name="tracking_search_empty_hint">Versuche einen anderen Titel oder füge den Link zum Eintrag von der Website des Trackers ein.</string>
 </resources>

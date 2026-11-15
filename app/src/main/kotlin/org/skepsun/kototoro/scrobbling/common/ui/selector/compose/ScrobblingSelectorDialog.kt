@@ -167,7 +167,10 @@ fun ScrobblingSelectorDialog(
     }
 }
 
-/** Search text for the current tracker; it starts as the title and searches again on the keyboard's search key. */
+/**
+ * Search text for the current tracker. It starts as the title; a link to the entry or `id:123` picks that entry
+ * directly. The search button or the keyboard's search key runs it.
+ */
 @Composable
 private fun ScrobblerSearchField(viewModel: ScrobblingSelectorViewModel) {
     val searchedQuery by viewModel.query.collectAsStateWithLifecycle()
@@ -186,16 +189,22 @@ private fun ScrobblerSearchField(viewModel: ScrobblingSelectorViewModel) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 4.dp),
-        placeholder = { Text(stringResource(R.string.search)) },
-        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-        trailingIcon = if (query.isNotEmpty()) {
-            {
-                IconButton(onClick = { query = "" }, modifier = Modifier.tvIconButtonRing()) {
-                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.clear))
+        placeholder = { Text(stringResource(R.string.tracking_search_hint)) },
+        trailingIcon = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (query.isNotEmpty()) {
+                    IconButton(onClick = { query = "" }, modifier = Modifier.tvIconButtonRing()) {
+                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.clear))
+                    }
+                }
+                IconButton(
+                    onClick = submit,
+                    enabled = query.isNotBlank(),
+                    modifier = Modifier.tvIconButtonRing(),
+                ) {
+                    Icon(Icons.Default.Search, contentDescription = stringResource(R.string.search))
                 }
             }
-        } else {
-            null
         },
         singleLine = true,
         shape = RoundedCornerShape(16.dp),

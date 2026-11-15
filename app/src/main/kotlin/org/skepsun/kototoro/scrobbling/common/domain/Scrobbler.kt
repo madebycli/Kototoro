@@ -82,6 +82,18 @@ abstract class Scrobbler(
         return repository.findContent(query, offset, isAnime)
     }
 
+    /** The entry with the service's own [id], for linking one the search does not find by title. */
+    suspend fun findContentById(id: Long): ScrobblerContent {
+        val info = repository.getContentInfo(id)
+        return ScrobblerContent(
+            id = id,
+            name = info.name,
+            altName = null,
+            cover = info.cover.takeIf { it.isNotBlank() },
+            url = info.url,
+        )
+    }
+
     /**
      * Links [mangaId] to [content] on the service.
      *

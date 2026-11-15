@@ -36,6 +36,7 @@ import org.skepsun.kototoro.parsers.util.runCatchingCancellable
 import org.skepsun.kototoro.scrobbling.common.domain.Scrobbler
 import org.skepsun.kototoro.scrobbling.common.domain.ScrobblerAuthRequiredException
 import org.skepsun.kototoro.scrobbling.common.domain.TrackerProgressSync
+import org.skepsun.kototoro.scrobbling.common.domain.parseTrackerReference
 import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblerContent
 import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblingStatus
 import org.skepsun.kototoro.scrobbling.common.ui.selector.model.ScrobblerHint
@@ -172,7 +173,22 @@ class ScrobblingSelectorViewModel @Inject constructor(
             val offset = if (append) scrobblerContentList.value.size else 0
             runCatchingCancellable {
                 val isAnime = manga.source.getContentType().let { it == org.skepsun.kototoro.parsers.model.ContentType.VIDEO || it == org.skepsun.kototoro.parsers.model.ContentType.HENTAI_VIDEO } || (manga.url.startsWith("file://") && (manga.url.contains("/video/") || arrayOf(".mp4", ".mkv", ".webm", ".ts", ".avi", ".m3u8").any { manga.url.endsWith(it, ignoreCase = true) }))
-                currentScrobbler.findContent(checkNotNull(searchQuery.value), offset, isAnime)
+                val query = searchQuery.value
+                if (!append) {
+                    // A pasted link or `id:` picks that entry directly; one that cannot be read is searched as text.
+                    parseTrackerReference(query, currentScrobbler.scrobblerService)
+                        ?.let { id -> runCatchingCancellable { currentScrobbler.findContentById(id) }.getOrNull() }
+                        ?.let { found ->
+                            selectedItemId.value = found.id
+                            return@runCatchingCancellable listOf(found)
+                        }
+                }
+                val results = currentScrobbler.findContent(query, offset, isAnime)
+                if (append || results.isNotEmpty() || query != manga.title) {
+                    results
+                } else {
+                    searchAlternativeTitles(isAnime) ?: results
+                }
             }.onSuccess { list ->
                 val newList = (if (append) {
                     scrobblerContentList.value + list
@@ -188,6 +204,23 @@ class ScrobblingSelectorViewModel @Inject constructor(
                 listError.value = error
             }
         }
+    }
+
+    /**
+     * The first results for one of the title's alternative names, when the source's own title finds nothing (a
+     * translated or romanized name the tracker does not list). The field then shows the name that matched.
+     */
+    private suspend fun searchAlternativeTitles(isAnime: Boolean): List<ScrobblerContent>? {
+        val title = manga.title
+        for (alternative in manga.altTitles.asSequence().map { it.trim() }.filter { it.isNotEmpty() && it != title }
+            .distinct().take(MAX_ALTERNATIVE_TITLE_SEARCHES)) {
+            val results = currentScrobbler.findContent(alternative, 0, isAnime)
+            if (results.isNotEmpty()) {
+                searchQuery.value = alternative
+                return results
+            }
+        }
+        return null
     }
 
     fun onDoneClick() {
@@ -294,7 +327,7 @@ class ScrobblingSelectorViewModel @Inject constructor(
     private fun emptyResultsHint() = ScrobblerHint(
         icon = R.drawable.ic_empty_history,
         textPrimary = R.string.nothing_found,
-        textSecondary = R.string.text_search_holder_secondary,
+        textSecondary = R.string.tracking_search_empty_hint,
         error = null,
         actionStringRes = R.string.search,
     )
@@ -310,3 +343,6 @@ class ScrobblingSelectorViewModel @Inject constructor(
         )
     }
 }
+
+/** How many alternative names an empty title search tries, so a long list does not fire a request each. */
+private const val MAX_ALTERNATIVE_TITLE_SEARCHES = 4
