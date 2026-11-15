@@ -24,6 +24,8 @@ class MALScrobbler @Inject constructor(
     mangaRepositoryFactory: ContentRepository.Factory,
 ) : Scrobbler(db, ScrobblerService.MAL, repository, mangaRepositoryFactory) {
 
+    override val preservesRemoteStateOnBinding: Boolean = true
+
     init {
         statuses[ScrobblingStatus.PLANNED] = "plan_to_read"
         statuses[ScrobblingStatus.READING] = "reading"

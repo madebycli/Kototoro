@@ -892,7 +892,7 @@ private fun DetailsScreenContent(
             onDismiss = { showTrackingDialog = false },
             onAdd = {
                 showTrackingDialog = false
-                viewModel.prepareTrackingContent { appRouter.showScrobblingSelectorSheet(it, null) }
+                viewModel.prepareTrackingContent { appRouter.showScrobblingSelectorSheet(it, null, preserveRemoteState = true) }
             },
             onOpen = { service ->
                 showTrackingDialog = false

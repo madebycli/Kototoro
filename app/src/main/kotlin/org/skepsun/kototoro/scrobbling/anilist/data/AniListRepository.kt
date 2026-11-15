@@ -186,6 +186,20 @@ class AniListRepository @Inject constructor(
 
     override suspend fun createRate(mangaId: Long, content: ScrobblerContent) {
         val scrobblerContentId = content.id
+        // Ask AniList for the current viewer's entry before creating one. A mutation used
+        // as a lookup can reset an existing list entry on some services.
+        val existing = doRequest(
+            REQUEST_QUERY,
+            """
+                Media(id: $scrobblerContentId) {
+                    mediaListEntry { id mediaId status notes score progress }
+                }
+            """,
+        ).getJSONObject("data").getJSONObject("Media").optJSONObject("mediaListEntry")
+        if (existing != null) {
+            saveRate(existing, mangaId)
+            return
+        }
         val response = doRequest(
             REQUEST_MUTATION,
             """
@@ -891,7 +905,7 @@ class AniListRepository @Inject constructor(
             targetId = json.getLong("mediaId"),
             status = json.getString("status"),
             chapter = json.getInt("progress"),
-            comment = json.getString("notes"),
+            comment = json.getStringOrNull("notes"),
             rating = scoreFormat.normalize(json.getDouble("score").toFloat()),
         )
         db.upsertScrobbling(entity)

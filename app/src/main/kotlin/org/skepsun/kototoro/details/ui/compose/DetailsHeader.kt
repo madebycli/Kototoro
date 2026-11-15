@@ -250,6 +250,14 @@ fun DetailsHeader(
             ?.takeIf { it.hasRating }
             ?.let { String.format(defaultLocale, "%.1f", it.rating * 10f) }
     }
+    val communityTracking = linkedTrackingItems
+        .filter { it.hasScrobblingBinding && it.communityScore != null }
+        .sortedByDescending { it.isPreferred }
+        .firstOrNull()
+    val trackingLabel = communityTracking?.let {
+        stringResource(R.string.tracking_community_score, stringResource(it.service.titleResId),
+            String.format(defaultLocale, "%.1f", it.communityScore))
+    } ?: stringResource(R.string.tracking)
     val state = content?.state
     val progressLabel = if (historyInfo.history != null) {
         "${(historyInfo.percent * 100f).roundToInt()}%"
@@ -527,7 +535,7 @@ fun DetailsHeader(
                         )
                         SuggestionChip(
                             onClick = onTrackingClick,
-                            label = { Text(stringResource(R.string.tracking)) },
+                            label = { Text(trackingLabel) },
                         )
                         RatingStatusChip(
                             rating = unifiedRating,
@@ -691,7 +699,7 @@ fun DetailsHeader(
                         )
                         SuggestionChip(
                             onClick = onTrackingClick,
-                            label = { Text(stringResource(R.string.tracking)) },
+                            label = { Text(trackingLabel) },
                         )
                         RatingStatusChip(
                             rating = unifiedRating,
@@ -889,7 +897,7 @@ fun DetailsHeader(
                     if (showWorkActions) {
                         SuggestionChip(
                             onClick = onTrackingClick,
-                            label = { Text(stringResource(R.string.tracking)) },
+                            label = { Text(trackingLabel) },
                         )
                         RatingStatusChip(
                             rating = unifiedRating,

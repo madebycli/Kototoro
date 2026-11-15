@@ -80,7 +80,12 @@ abstract class Scrobbler(
     }
 
     suspend fun linkContent(mangaId: Long, content: ScrobblerContent) {
+        val previous = if (preservesRemoteStateOnBinding) resolveScrobblingEntity(mangaId) else null
         repository.createRate(mangaId, content)
+        // Keep the old mapping until the new remote entry has been read successfully.
+        if (previous != null && previous.targetId != content.id) {
+            db.getScrobblingDao().delete(previous)
+        }
     }
 
     suspend fun scrobble(manga: Content, chapterId: Long) {

@@ -2501,10 +2501,33 @@ class DetailsViewModel @Inject constructor(
 
     val trackingMatchSuggestion = MutableStateFlow<TrackingSiteMatchResult?>(null)
 
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private val linkedCommunityScores = scrobblingInfo
+        .map { items -> items.map { it.scrobbler to it.targetId }.distinct() }
+        .distinctUntilChanged()
+        .mapLatest { keys ->
+            supervisorScope {
+                keys.map { (service, remoteId) ->
+                    async(Dispatchers.IO) {
+                        val details = runCatchingCancellable {
+                            trackingSiteCacheRepository.readDetails(service, remoteId)
+                                ?: kotlinx.coroutines.withTimeoutOrNull(8_000) {
+                                    trackingSiteDiscoveryService.getDetails(service, remoteId).also {
+                                        trackingSiteCacheRepository.saveDetails(it)
+                                    }
+                                }
+                        }.getOrNull()
+                        (service to remoteId) to details?.score
+                    }
+                }.awaitAll().toMap()
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
     val linkedTrackingItems: StateFlow<List<LinkedTrackingItemUiModel>> = combine(
         observedTrackingLinks,
         scrobblingInfo,
-    ) { links, scrobblingItems ->
+        linkedCommunityScores,
+    ) { links, scrobblingItems, scores ->
         val linkedItems = links.mapNotNull { link ->
             val service = org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblerService.entries
                 .firstOrNull { it.id == link.service }
@@ -2524,6 +2547,7 @@ class DetailsViewModel @Inject constructor(
                 rating = scrobbling?.rating,
                 hasScrobblingBinding = scrobbling != null,
                 isPreferred = service == settings.preferredTrackingSite,
+                communityScore = scores[service to link.remoteId] ?: cached?.score,
             )
         }
         linkedItems + scrobblingItems.filter { info ->
@@ -2540,6 +2564,7 @@ class DetailsViewModel @Inject constructor(
                 rating = info.rating,
                 hasScrobblingBinding = true,
                 isPreferred = info.scrobbler == settings.preferredTrackingSite,
+                communityScore = scores[info.scrobbler to info.targetId],
             )
         }
     }.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, emptyList())
@@ -3698,11 +3723,12 @@ class DetailsViewModel @Inject constructor(
                 val scrobbler = scrobblers.firstOrNull {
                     it.scrobblerService == linked.service && it.isEnabled
                 } ?: return@forEach
+                val current = scrobbler.getScrobblingInfoOrNull(currentMangaId) ?: return@forEach
                 scrobbler.updateScrobblingInfo(
                     mangaId = currentMangaId,
-                    rating = linked.rating ?: 0f,
+                    rating = current.rating,
                     status = status,
-                    comment = null,
+                    comment = current.comment,
                 )
             }
         }
@@ -3716,11 +3742,12 @@ class DetailsViewModel @Inject constructor(
                 val scrobbler = scrobblers.firstOrNull {
                     it.scrobblerService == linked.service && it.isEnabled
                 } ?: return@forEach
+                val current = scrobbler.getScrobblingInfoOrNull(currentMangaId) ?: return@forEach
                 scrobbler.updateScrobblingInfo(
                     mangaId = currentMangaId,
                     rating = rating.coerceIn(0f, 1f),
-                    status = linked.status,
-                    comment = null,
+                    status = current.status,
+                    comment = current.comment,
                 )
             }
         }

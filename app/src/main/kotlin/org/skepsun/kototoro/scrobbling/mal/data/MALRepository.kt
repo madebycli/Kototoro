@@ -362,6 +362,17 @@ class MALRepository @Inject constructor(
         val scrobblerContentId = content.id
         content.mediaType?.let { rememberEndpoint(scrobblerContentId, it) }
         val endpoint = content.mediaType ?: resolvedEndpoint(scrobblerContentId, mangaId, "")
+        val detailsUrl = BASE_API_URL.toHttpUrl().newBuilder()
+            .addPathSegment(endpoint)
+            .addPathSegment(scrobblerContentId.toString())
+            .addQueryParameter("fields", "my_list_status")
+            .build()
+        val details = okHttp.newCall(Request.Builder().url(detailsUrl).get().build()).await().parseJson()
+        check(details.optLong("id", -1L) == scrobblerContentId) { "Could not read the MAL list entry" }
+        if (details.optJSONObject("my_list_status") != null) {
+            saveRate(details, mangaId, scrobblerContentId, endpoint)
+            return
+        }
         val body = FormBody.Builder()
             .add("status", defaultStatus(endpoint == ANIME_ENDPOINT))
             .add("score", "0")

@@ -28,6 +28,7 @@ import org.skepsun.kototoro.scrobbling.common.ui.selector.compose.ScrobblingSele
 fun ScrobblingSelectorSheetRoute(
     manga: Content,
     scrobblerServiceId: Int = -1,
+    preserveRemoteState: Boolean = false,
     onDismissRequest: () -> Unit,
     viewModel: ScrobblingSelectorViewModel = hiltViewModel(),
 ) {
@@ -43,7 +44,8 @@ fun ScrobblingSelectorSheetRoute(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
 
-    LaunchedEffect(manga, scrobblerServiceId) {
+    LaunchedEffect(manga, scrobblerServiceId, preserveRemoteState) {
+        if (preserveRemoteState) viewModel.requireStatePreservingServices()
         viewModel.initialize(manga)
         val selectedIndex = viewModel.availableScrobblers.indexOfFirst {
             it.scrobblerService.id == scrobblerServiceId

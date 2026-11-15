@@ -1,5 +1,8 @@
 package org.skepsun.kototoro.scrobbling.common.ui.selector
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import androidx.recyclerview.widget.RecyclerView.NO_ID
@@ -59,7 +62,21 @@ class ScrobblingSelectorViewModel @Inject constructor(
             "ScrobblingSelectorViewModel is not initialized with a manga"
         }
 
-    val availableScrobblers = scrobblers.sortedBy { it.scrobblerService.id }
+    private val allScrobblers = scrobblers.sortedBy { it.scrobblerService.id }
+    private var independentTracking = false
+    var availableScrobblers by mutableStateOf(allScrobblers)
+        private set
+
+    fun requireStatePreservingServices() {
+        independentTracking = true
+        val safeServices = allScrobblers.filter { it.preservesRemoteStateOnBinding }
+        if (availableScrobblers == safeServices) return
+        initJob?.cancel()
+        loadingJob?.cancel()
+        selectedScrobblerIndex.value = 0
+        availableScrobblers = safeServices
+        if (initializedMangaId != null && safeServices.isNotEmpty()) initialize()
+    }
 
     val selectedScrobblerIndex = MutableStateFlow(0)
 
@@ -223,7 +240,7 @@ class ScrobblingSelectorViewModel @Inject constructor(
                     )
                 }
             }
-            if (favouritesRepository.getCategoriesIdsByWork(manga.id).isEmpty()) {
+            if (!independentTracking && favouritesRepository.getCategoriesIdsByWork(manga.id).isEmpty()) {
                 val categories = favouritesRepository.observeCategories().firstOrNull()
                 val categoryId = if (!categories.isNullOrEmpty()) {
                     categories.first().id
