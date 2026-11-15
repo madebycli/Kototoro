@@ -30,6 +30,8 @@ import org.skepsun.kototoro.core.util.ext.combine as extCombine
 import org.skepsun.kototoro.core.util.ext.sanitize
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
@@ -70,6 +72,7 @@ import org.skepsun.kototoro.core.util.ext.awaitCancellable
 import org.skepsun.kototoro.core.util.ext.call
 import org.skepsun.kototoro.core.util.ext.computeSize
 import org.skepsun.kototoro.core.util.ext.onEachWhile
+import org.skepsun.kototoro.core.util.ext.printStackTraceDebug
 import org.skepsun.kototoro.details.data.CachedTranslationEntry
 import org.skepsun.kototoro.details.data.ContentDetails
 import org.skepsun.kototoro.details.data.DetailsTranslationCache
@@ -121,6 +124,7 @@ import org.skepsun.kototoro.reader.ui.FULLY_READ_CHAPTER_ID
 import org.skepsun.kototoro.reader.ui.ReaderState
 import org.skepsun.kototoro.scrobbling.common.domain.Scrobbler
 import org.skepsun.kototoro.scrobbling.common.domain.tryScrobble
+import org.skepsun.kototoro.scrobbling.common.domain.TrackerProgressSync
 import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblingInfo
 import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblingStatus
 import org.skepsun.kototoro.stats.data.StatsRepository
@@ -197,6 +201,7 @@ private const val READING_SEARCH_MAX_PARALLELISM = 4
 private const val READING_SEARCH_LOG_TAG = "ReadingSourceSearch"
 private const val ENTITY_TRACKING_SEARCH_RESULT_LIMIT = 3
 private const val MAX_DUPLICATE_PROMPT_CANDIDATES = 3
+private const val COMMUNITY_SCORE_TIMEOUT_MS = 8_000L
 private val ENTITY_TRACKING_SEARCH_SERVICES = listOf(
     ScrobblerService.ANILIST,
     ScrobblerService.BANGUMI,
@@ -378,6 +383,7 @@ class DetailsViewModel @Inject constructor(
     private val spaceContentPolicy: SpaceContentPolicy,
     private val spaceBrowseScope: SpaceBrowseScope,
     private val categoryDisplayPreferences: FavouriteCategoryDisplayPreferences,
+    private val trackerProgressSync: TrackerProgressSync,
     chapterTranslationStore: org.skepsun.kototoro.reader.translate.data.ChapterTranslationStore,
 ) : ChaptersPagesViewModel(
     settings = settings,
@@ -2501,11 +2507,35 @@ class DetailsViewModel @Inject constructor(
 
     val trackingMatchSuggestion = MutableStateFlow<TrackingSiteMatchResult?>(null)
 
+    /** The community score (0–10) of each linked tracker entry, fetched once per entry; absent when unavailable. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private val linkedCommunityScores: StateFlow<Map<Pair<ScrobblerService, Long>, Float>> = scrobblingInfo
+        .map { items -> items.distinctBy { it.scrobbler to it.targetId } }
+        .distinctUntilChangedBy { items -> items.map { it.scrobbler to it.targetId } }
+        .mapLatest { items ->
+            supervisorScope {
+                items.map { info ->
+                    async {
+                        val scrobbler = scrobblers.firstOrNull { it.scrobblerService == info.scrobbler && it.isEnabled }
+                        val score = runCatchingCancellable {
+                            kotlinx.coroutines.withTimeoutOrNull(COMMUNITY_SCORE_TIMEOUT_MS) {
+                                scrobbler?.getCommunityScore(info)
+                            }
+                        }.onFailure { it.printStackTraceDebug() }.getOrNull()
+                        score?.let { (info.scrobbler to info.targetId) to it }
+                    }
+                }.awaitAll().filterNotNull().toMap()
+            }
+        }
+        .flowOn(Dispatchers.IO)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
     val linkedTrackingItems: StateFlow<List<LinkedTrackingItemUiModel>> = combine(
         observedTrackingLinks,
         scrobblingInfo,
-    ) { links, scrobblingItems ->
-        links.mapNotNull { link ->
+        linkedCommunityScores,
+    ) { links, scrobblingItems, scores ->
+        val linkedItems = links.mapNotNull { link ->
             val service = org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblerService.entries
                 .firstOrNull { it.id == link.service }
                 ?: return@mapNotNull null
@@ -2524,6 +2554,25 @@ class DetailsViewModel @Inject constructor(
                 rating = scrobbling?.rating,
                 hasScrobblingBinding = scrobbling != null,
                 isPreferred = service == settings.preferredTrackingSite,
+                communityScore = scores[service to link.remoteId],
+            )
+        }
+        // Entries linked from the tracking sheet have no tracking-site link; they still drive status and score.
+        linkedItems + scrobblingItems.filter { info ->
+            linkedItems.none { it.service == info.scrobbler && it.remoteId == info.targetId }
+        }.map { info ->
+            LinkedTrackingItemUiModel(
+                service = info.scrobbler,
+                remoteId = info.targetId,
+                title = info.title,
+                coverUrl = info.coverUrl.normalizedImageUrl(),
+                summary = info.description?.toString(),
+                url = info.externalUrl,
+                status = info.status,
+                rating = info.rating,
+                hasScrobblingBinding = true,
+                isPreferred = info.scrobbler == settings.preferredTrackingSite,
+                communityScore = scores[info.scrobbler to info.targetId],
             )
         }
     }.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, emptyList())
@@ -2688,6 +2737,13 @@ class DetailsViewModel @Inject constructor(
     val selectedBranchValue: String?
         get() = selectedBranch.value
 
+    /**
+     * Entries already reconciled during this visit, by service, remote entry and local title. Declared before the init
+     * block below, whose collector reads it from another thread.
+     */
+    private val syncedTrackerEntries: MutableSet<Triple<ScrobblerService, Long, Long>> =
+        java.util.concurrent.ConcurrentHashMap.newKeySet()
+
     init {
         if (initialContentIntentOverride?.mangaId?.takeIf { it != 0L } != null || intent.mangaId != 0L || intent.manga != null) {
             loadingJob = doLoad(force = false)
@@ -2696,6 +2752,13 @@ class DetailsViewModel @Inject constructor(
             .onEach {
                 refreshTrackingMatchSuggestion()
             }
+            .launchIn(viewModelScope + Dispatchers.Default)
+        // Each linked tracker entry is reconciled once per visit, as soon as the chapters are known.
+        combine(
+            scrobblingInfo,
+            mangaDetails.map { it?.chapters?.isNotEmpty() == true }.distinctUntilChanged(),
+        ) { entries, _ -> entries }
+            .onEach { entries -> syncTrackerProgress(entries) }
             .launchIn(viewModelScope + Dispatchers.Default)
         launchJob(Dispatchers.Default + SkipErrors) {
             val manga = mangaDetails.firstOrNull { !it?.chapters.isNullOrEmpty() } ?: return@launchJob
@@ -3644,11 +3707,93 @@ class DetailsViewModel @Inject constructor(
         val scrobbler = getScrobbler(scrobblerServiceId) ?: return
         launchJob(Dispatchers.Default) {
             val currentMangaId = resolveCurrentLocalMangaId() ?: return@launchJob
+            val current = scrobbler.getScrobblingInfoOrNull(currentMangaId)
             scrobbler.updateScrobblingInfo(
                 mangaId = currentMangaId,
                 rating = rating,
                 status = status,
-                comment = null,
+                comment = current?.comment,
+            )
+        }
+    }
+
+    /** The trackers the user is signed in to, in the order the tracker settings list them. */
+    fun authorizedTrackingServices(): List<ScrobblerService> = scrobblers
+        .filter { it.isEnabled }
+        .map { it.scrobblerService }
+        .sortedBy { it.id }
+
+    /**
+     * Resolves the stored title that tracker entries bind to, storing the current one first when it is not in the
+     * library yet, and hands it to [onReady] with its chapters so a new entry can start from the local progress.
+     */
+    fun prepareTrackingContent(onReady: (Content) -> Unit) {
+        launchJob(Dispatchers.Main) {
+            val content = withContext(Dispatchers.IO) {
+                ensureCurrentWorkContent()?.let { loadTrackingContent(it) }
+            }
+            if (content != null) onReady(content)
+        }
+    }
+
+    /**
+     * Reads [service]'s entry again and reconciles it with the local read state now; [onDone] reports which side
+     * moved.
+     */
+    fun syncTrackingProgress(service: ScrobblerService, onDone: (TrackerProgressSync.Result) -> Unit) {
+        val scrobbler = getScrobbler(service.id) ?: return
+        launchJob(Dispatchers.Default) {
+            val mangaId = resolveCurrentLocalMangaId() ?: return@launchJob
+            val content = loadTrackingContent(mangaId) ?: return@launchJob
+            val outcome = trackerProgressSync.sync(scrobbler, content, preferredBranch = selectedBranch.value)
+            withContext(Dispatchers.Main) { onDone(outcome.result) }
+        }
+    }
+
+    private suspend fun syncTrackerProgress(entries: List<ScrobblingInfo>) {
+        for (entry in entries) {
+            val key = Triple(entry.scrobbler, entry.targetId, entry.mangaId)
+            if (entry.mangaId == 0L || key in syncedTrackerEntries) continue
+            val scrobbler = scrobblers.firstOrNull { it.scrobblerService == entry.scrobbler && it.isEnabled } ?: continue
+            val content = loadTrackingContent(entry.mangaId)?.takeUnless { it.chapters.isNullOrEmpty() } ?: continue
+            if (!syncedTrackerEntries.add(key)) continue
+            runCatchingCancellable {
+                trackerProgressSync.sync(scrobbler, content, preferredBranch = selectedBranch.value)
+            }.onSuccess { outcome ->
+                // Chapters greying out on their own would be a surprise: say where they came from, and offer undo.
+                if (outcome.result == TrackerProgressSync.Result.PULLED) {
+                    onActionDone.call(ReversibleAction(R.string.tracking_sync_pulled_auto, outcome.undo))
+                }
+            }.onFailure { it.printStackTraceDebug() }
+        }
+    }
+
+    /** The stored title tracker entries bind to, with its chapters, falling back to the loaded ones. */
+    private suspend fun loadTrackingContent(mangaId: Long): Content? {
+        val stored = dataRepository.findPreferredLocalContentById(mangaId, withChapters = true)
+            ?: dataRepository.findContentById(mangaId, withChapters = true)
+            ?: return null
+        val loadedChapters = getContentOrNull()?.takeIf { it.id == stored.id }?.chapters
+        return if (stored.chapters.isNullOrEmpty() && !loadedChapters.isNullOrEmpty()) {
+            stored.copy(chapters = loadedChapters)
+        } else {
+            stored
+        }
+    }
+
+    fun updateTrackingProgress(scrobblerServiceId: Int, progress: Int) {
+        val scrobbler = getScrobbler(scrobblerServiceId) ?: return
+        launchJob(Dispatchers.Default) {
+            val currentMangaId = resolveCurrentLocalMangaId() ?: return@launchJob
+            scrobbler.updateProgress(currentMangaId, progress)
+            // Raising it by hand marks those chapters read here too; lowering it is left as the user set it.
+            val content = loadTrackingContent(currentMangaId) ?: return@launchJob
+            trackerProgressSync.sync(
+                scrobbler = scrobbler,
+                manga = content,
+                preferredBranch = selectedBranch.value,
+                refresh = false,
+                direction = TrackerProgressSync.Direction.PULL_ONLY,
             )
         }
     }
@@ -3662,11 +3807,12 @@ class DetailsViewModel @Inject constructor(
                 val scrobbler = scrobblers.firstOrNull {
                     it.scrobblerService == linked.service && it.isEnabled
                 } ?: return@forEach
+                val current = scrobbler.getScrobblingInfoOrNull(currentMangaId) ?: return@forEach
                 scrobbler.updateScrobblingInfo(
                     mangaId = currentMangaId,
-                    rating = linked.rating ?: 0f,
+                    rating = current.rating,
                     status = status,
-                    comment = null,
+                    comment = current.comment,
                 )
             }
         }
@@ -3680,11 +3826,12 @@ class DetailsViewModel @Inject constructor(
                 val scrobbler = scrobblers.firstOrNull {
                     it.scrobblerService == linked.service && it.isEnabled
                 } ?: return@forEach
+                val current = scrobbler.getScrobblingInfoOrNull(currentMangaId) ?: return@forEach
                 scrobbler.updateScrobblingInfo(
                     mangaId = currentMangaId,
                     rating = rating.coerceIn(0f, 1f),
-                    status = linked.status,
-                    comment = null,
+                    status = current.status,
+                    comment = current.comment,
                 )
             }
         }
@@ -4014,7 +4161,7 @@ class DetailsViewModel @Inject constructor(
             ?: manga.filterNotNull().firstOrNull { it.id == mangaId }
             ?: return
         val previous = scrobbler.getScrobblingInfoOrNull(mangaId)
-        scrobbler.linkContent(
+        val created = scrobbler.linkContent(
             mangaId,
             item.toScrobblerContent().copy(mediaType = contentType.toScrobblerMediaType()),
         )
@@ -4027,7 +4174,8 @@ class DetailsViewModel @Inject constructor(
             "Scrobbling info for manga $mangaId not found after linking target ${item.remoteId} " +
                 "(${item.service.name}, mediaType=${contentType.toScrobblerMediaType()})"
         }
-        if (scrobbler.preservesRemoteStateOnBinding) return
+        // An entry that already existed on the service keeps its remote status, score and progress.
+        if (!created) return
         val history = historyRepository.getOne(manga)
         scrobbler.updateScrobblingInfo(
             mangaId = mangaId,

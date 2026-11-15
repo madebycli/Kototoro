@@ -51,6 +51,9 @@ fun UsersSettingsRoute(
     val preferredTrackingSite = settings.observeAsState(AppSettings.KEY_PREFERRED_TRACKING_SITE) {
         preferredTrackingSite
     }.value
+    val isProgressSyncEnabled = settings.observeAsState(AppSettings.KEY_TRACKING_PROGRESS_SYNC) {
+        isTrackingProgressSyncEnabled
+    }.value
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     var pendingAuthService by remember { mutableStateOf<ScrobblerService?>(null) }
@@ -75,6 +78,7 @@ fun UsersSettingsRoute(
             accounts = accounts,
             preferredTrackingSite = preferredTrackingSite,
             preferredTrackingSiteOptions = preferredTrackingSiteOptions,
+            isProgressSyncEnabled = isProgressSyncEnabled,
         ),
         snackbarHostState = snackbarHostState,
         pendingAuthService = pendingAuthService,
@@ -89,6 +93,9 @@ fun UsersSettingsRoute(
         },
         onPreferredTrackingSiteChange = { service ->
             settings.preferredTrackingSite = service
+        },
+        onProgressSyncChange = { enabled ->
+            settings.isTrackingProgressSyncEnabled = enabled
         },
         onTrackingServiceClick = { service ->
             if (scrobblerAuthHelper.isAuthorized(service)) {

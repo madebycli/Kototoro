@@ -118,7 +118,7 @@ class MigrateUseCase @Inject constructor(
             if (mode == MigrationMode.REPLACE) {
                 scrobbler.unregisterScrobbling(oldId)
             }
-            scrobbler.linkContent(
+            val created = scrobbler.linkContent(
                 stored.id,
                 ScrobblerContent(
                     id = prevInfo.targetId,
@@ -128,7 +128,8 @@ class MigrateUseCase @Inject constructor(
                     url = prevInfo.externalUrl,
                 ),
             )
-            if (scrobbler.preservesRemoteStateOnBinding) continue
+            // The remote entry already holds this state; only a newly created one needs it.
+            if (!created) continue
             scrobbler.updateScrobblingInfo(
                 mangaId = stored.id,
                 rating = prevInfo.rating,

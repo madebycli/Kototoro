@@ -12,6 +12,7 @@ import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import org.skepsun.kototoro.core.db.MangaDatabase
@@ -40,7 +41,7 @@ class MangaBakaRepositoryTest {
             val preview = ScrobblingEntity(8, 92, 0, 377, "rereading", 12, "Keep", 0.75f)
             coEvery { dao.findAllByTargetId(8, 377) } returns listOf(preview)
             server.enqueue(MockResponse().setBody(entry))
-            repository(server).createRate(55, content)
+            assertFalse(repository(server).createRate(55, content))
             assertEquals(1, server.requestCount)
             assertEquals("GET", server.takeRequest().method)
             coVerify { dao.upsert(match {

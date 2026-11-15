@@ -922,13 +922,13 @@ class KitsuRepository(
         }
     }
 
-    override suspend fun createRate(mangaId: Long, content: ScrobblerContent) {
+    override suspend fun createRate(mangaId: Long, content: ScrobblerContent): Boolean {
         val scrobblerContentId = content.id
         val isAnime = isAnimeContent(mangaId)
         val typeKey = if (isAnime) "anime" else "manga"
         findExistingRate(scrobblerContentId, isAnime)?.let {
             saveRate(it, mangaId, typeKey)
-            return
+            return false
         }
         val user = cachedUser ?: loadUser()
         val payload = JSONObject()
@@ -958,6 +958,14 @@ class KitsuRepository(
             .post(payload.toKitsuRequestBody())
         val response = okHttp.newCall(request.build()).await().parseJson().ensureSuccess().getJSONObject("data")
         saveRate(response, mangaId, typeKey)
+        return true
+    }
+
+    override suspend fun refreshRate(mangaId: Long, targetId: Long, mediaType: String): Boolean {
+        val isAnime = isAnimeContent(mangaId)
+        val entry = findExistingRate(targetId, isAnime) ?: return false
+        saveRate(entry, mangaId, if (isAnime) "anime" else "manga")
+        return true
     }
 
     override suspend fun updateRate(rateId: Int, mangaId: Long, chapter: Int) {

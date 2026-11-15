@@ -35,6 +35,7 @@ import org.skepsun.kototoro.parsers.util.ifZero
 import org.skepsun.kototoro.parsers.util.runCatchingCancellable
 import org.skepsun.kototoro.scrobbling.common.domain.Scrobbler
 import org.skepsun.kototoro.scrobbling.common.domain.ScrobblerAuthRequiredException
+import org.skepsun.kototoro.scrobbling.common.domain.TrackerProgressSync
 import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblerContent
 import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblingStatus
 import org.skepsun.kototoro.scrobbling.common.ui.selector.model.ScrobblerHint
@@ -46,6 +47,7 @@ class ScrobblingSelectorViewModel @Inject constructor(
     scrobblers: Set<@JvmSuppressWildcards Scrobbler>,
     private val contentDataRepository: ContentDataRepository,
     private val historyRepository: HistoryRepository,
+    private val trackerProgressSync: TrackerProgressSync,
     private val favouritesRepository: org.skepsun.kototoro.favourites.domain.FavouritesRepository,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
 ) : BaseViewModel() {
@@ -60,6 +62,12 @@ class ScrobblingSelectorViewModel @Inject constructor(
         }
 
     val availableScrobblers = scrobblers.sortedBy { it.scrobblerService.id }
+
+    /**
+     * Whether linking also puts an unfavourited title into the first favourites category. The details page's
+     * tracking sheet turns this off: tracking a title there must not change the library.
+     */
+    private var addToFavourites = true
 
     val selectedScrobblerIndex = MutableStateFlow(0)
 
@@ -99,6 +107,9 @@ class ScrobblingSelectorViewModel @Inject constructor(
     val onClose = MutableEventFlow<Unit>()
     private val searchQuery = MutableStateFlow(initialManga?.title.orEmpty())
 
+    /** The text the current results were searched for; the title until the user searches for something else. */
+    val query: StateFlow<String> = searchQuery
+
     val isEmpty: Boolean
         get() = scrobblerContentList.value.isEmpty()
 
@@ -111,7 +122,8 @@ class ScrobblingSelectorViewModel @Inject constructor(
         }
     }
 
-    fun initialize(manga: Content) {
+    fun initialize(manga: Content, addToFavourites: Boolean = true) {
+        this.addToFavourites = addToFavourites
         val isSameManga = initializedMangaId == manga.id
         mangaState = manga
         if (searchQuery.value.isBlank() || !isSameManga) {
@@ -195,7 +207,7 @@ class ScrobblingSelectorViewModel @Inject constructor(
         }
         doneJob = launchLoadingJob(Dispatchers.Default) {
             val prevInfo = currentScrobbler.getScrobblingInfoOrNull(manga.id)
-            currentScrobbler.linkContent(manga.id, selectedContent)
+            val created = currentScrobbler.linkContent(manga.id, selectedContent)
             var linkedInfo = currentScrobbler.getScrobblingInfoOrNull(manga.id)
             if (linkedInfo == null) {
                 currentScrobbler.syncLibrary()
@@ -205,7 +217,8 @@ class ScrobblingSelectorViewModel @Inject constructor(
                 "Scrobbling info for manga ${manga.id} not found after linking target $targetId"
             }
             val history = historyRepository.getOne(manga)
-            if (!currentScrobbler.preservesRemoteStateOnBinding) {
+            // An entry that was already on the user's list keeps its remote status, score and progress.
+            if (created) {
                 currentScrobbler.updateScrobblingInfo(
                     mangaId = manga.id,
                     rating = prevInfo?.rating ?: 0f,
@@ -216,14 +229,12 @@ class ScrobblingSelectorViewModel @Inject constructor(
                     },
                     comment = prevInfo?.comment,
                 )
-                if (history != null && manga.chapters?.any { it.id == history.chapterId } == true) {
-                    currentScrobbler.scrobble(
-                        manga = manga,
-                        chapterId = history.chapterId,
-                    )
-                }
             }
-            if (favouritesRepository.getCategoriesIdsByWork(manga.id).isEmpty()) {
+            // Whichever side has read further wins: the local read state goes up, or the remote entry does.
+            runCatchingCancellable {
+                trackerProgressSync.sync(currentScrobbler, manga, refresh = false)
+            }.onFailure { it.printStackTraceDebug() }
+            if (addToFavourites && favouritesRepository.getCategoriesIdsByWork(manga.id).isEmpty()) {
                 val categories = favouritesRepository.observeCategories().firstOrNull()
                 val categoryId = if (!categories.isNullOrEmpty()) {
                     categories.first().id

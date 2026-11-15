@@ -55,6 +55,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import android.widget.Toast
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -161,6 +162,8 @@ import org.skepsun.kototoro.reader.ui.ReaderState
 import org.skepsun.kototoro.favourites.ui.categories.select.compose.FavoriteCategoryDialog
 import org.skepsun.kototoro.main.ui.compose.TopBarControlSurface
 import org.skepsun.kototoro.stats.ui.sheet.ContentStatsViewModel
+import org.skepsun.kototoro.scrobbling.common.domain.TrackerProgressSync
+import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblerService
 import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblingStatus
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.Backdrop
@@ -268,6 +271,11 @@ private fun DetailsScreenContent(
     isTemporaryReadOnly: Boolean = false,
 ) {
     val detailsScreenState = rememberDetailsScreenState()
+    // The trackers the user is signed in to while the tracking sheet is open; null while it is closed.
+    var trackingSheetServices by remember { mutableStateOf<List<ScrobblerService>?>(null) }
+    // The tracker whose linked entry is open in its own sheet; null while none is.
+    var trackerEntryService by remember { mutableStateOf<ScrobblerService?>(null) }
+    val trackingEntries by viewModel.scrobblingInfo.collectAsStateWithLifecycle()
     val showDeleteLocalDialog by detailsScreenState.showDeleteLocalDialog
     val showShareOptions by detailsScreenState.showShareOptions
     val pendingAuthorSearch by detailsScreenState.pendingAuthorSearch
@@ -884,11 +892,37 @@ private fun DetailsScreenContent(
             }
         }
     }
+    trackingSheetServices?.let { services ->
+        DetailsTrackingSheet(
+            services = services,
+            entries = trackingEntries,
+            linkedTrackingItems = linkedTrackingItems,
+            onDismissRequest = { trackingSheetServices = null },
+            onOpenEntry = { service ->
+                trackingSheetServices = null
+                trackerEntryService = service
+            },
+            onLink = { service ->
+                trackingSheetServices = null
+                viewModel.prepareTrackingContent { content ->
+                    appRouter.showScrobblingSelectorSheet(content, service, addToFavourites = false)
+                }
+            },
+            onManageAccounts = {
+                trackingSheetServices = null
+                appRouter.openTrackingAccountsSettings()
+            },
+        )
+    }
+
     val handleActionClick: (DetailsAction) -> Unit = handleDetailsAction@{ action ->
         if (!isWorkActionEnabled && action.isWorkOnlyAction()) {
             return@handleDetailsAction
         }
         when (action) {
+            DetailsAction.OpenTracking -> {
+                trackingSheetServices = viewModel.authorizedTrackingServices()
+            }
             DetailsAction.ToggleList -> {
                 openPaneTab(DETAILS_TAB_CHAPTERS)
             }
@@ -2153,6 +2187,62 @@ private fun DetailsScreenContent(
                         handleActionClick(DetailsAction.OpenWebUrl(url))
                     },
                 )
+            }
+
+            trackerEntryService?.let { service ->
+                val entry = trackingEntries.firstOrNull { it.scrobbler == service }
+                if (entry == null) {
+                    // Unlinked meanwhile (here or by the selector): there is nothing left to show.
+                    LaunchedEffect(service) { trackerEntryService = null }
+                } else {
+                    val serviceTitle = stringResource(service.titleResId)
+                    DetailsTrackerEntrySheet(
+                        entry = entry,
+                        communityScore = linkedTrackingItems.firstOrNull {
+                            it.service == service && it.remoteId == entry.targetId
+                        }?.communityScore,
+                        totalChapters = historyInfo.totalChapters.takeIf { it > 0 },
+                        countsEpisodes = contentType == ContentType.VIDEO || contentType == ContentType.HENTAI_VIDEO,
+                        onDismissRequest = { trackerEntryService = null },
+                        onStatusChange = { status -> viewModel.updateScrobbling(service.id, entry.rating, status) },
+                        onScoreChange = { rating -> viewModel.updateScrobbling(service.id, rating, entry.status) },
+                        onProgressChange = { progress -> viewModel.updateTrackingProgress(service.id, progress) },
+                        onSync = {
+                            viewModel.syncTrackingProgress(service) { result ->
+                                val message = when (result) {
+                                    TrackerProgressSync.Result.PULLED -> R.string.tracking_sync_pulled
+                                    TrackerProgressSync.Result.PUSHED -> R.string.tracking_sync_pushed
+                                    TrackerProgressSync.Result.UNCHANGED -> R.string.tracking_sync_unchanged
+                                }
+                                Toast.makeText(context, context.getString(message, serviceTitle), Toast.LENGTH_SHORT)
+                                    .show()
+                            }
+                        },
+                        onOpenDetails = {
+                            trackerEntryService = null
+                            handleActionClick(
+                                DetailsAction.OpenTrackingDetails(
+                                    service = service,
+                                    remoteId = entry.targetId,
+                                    url = entry.externalUrl.takeIf { it.isNotBlank() },
+                                ),
+                            )
+                        },
+                        onOpenInBrowser = entry.externalUrl.takeIf { it.isNotBlank() }?.let { url ->
+                            { handleActionClick(DetailsAction.OpenWebUrl(url)) }
+                        },
+                        onChangeLink = {
+                            trackerEntryService = null
+                            viewModel.prepareTrackingContent { content ->
+                                appRouter.showScrobblingSelectorSheet(content, service, addToFavourites = false)
+                            }
+                        },
+                        onUnlink = {
+                            trackerEntryService = null
+                            viewModel.unregisterScrobbling(service.id)
+                        },
+                    )
+                }
             }
 
             selectedSupplementalRelationItem?.let { item ->

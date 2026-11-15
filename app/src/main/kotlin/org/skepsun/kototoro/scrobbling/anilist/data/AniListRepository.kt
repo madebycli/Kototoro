@@ -184,8 +184,15 @@ class AniListRepository @Inject constructor(
         return data.mapJSON { ScrobblerContent(it, query) }
     }
 
-    override suspend fun createRate(mangaId: Long, content: ScrobblerContent) {
+    override suspend fun createRate(mangaId: Long, content: ScrobblerContent): Boolean {
         val scrobblerContentId = content.id
+        // Ask AniList for the current viewer's entry before creating one. A mutation used
+        // as a lookup can reset an existing list entry on some services.
+        val existing = findListEntry(scrobblerContentId)
+        if (existing != null) {
+            saveRate(existing, mangaId)
+            return false
+        }
         val response = doRequest(
             REQUEST_MUTATION,
             """
@@ -200,7 +207,24 @@ class AniListRepository @Inject constructor(
             """,
         )
         saveRate(response.getJSONObject("data").getJSONObject("SaveMediaListEntry"), mangaId)
+        return true
     }
+
+    override suspend fun refreshRate(mangaId: Long, targetId: Long, mediaType: String): Boolean {
+        val entry = findListEntry(targetId) ?: return false
+        saveRate(entry, mangaId)
+        return true
+    }
+
+    /** The viewer's list entry for media [id], or `null` when it is not on their list. */
+    private suspend fun findListEntry(id: Long): JSONObject? = doRequest(
+        REQUEST_QUERY,
+        """
+            Media(id: $id) {
+                mediaListEntry { id mediaId status notes score progress }
+            }
+        """,
+    ).getJSONObject("data").getJSONObject("Media").optJSONObject("mediaListEntry")
 
     override suspend fun updateRate(rateId: Int, mangaId: Long, chapter: Int) {
         val response = doRequest(
@@ -241,6 +265,14 @@ class AniListRepository @Inject constructor(
 
     override suspend fun getContentInfo(id: Long): ScrobblerContentInfo {
         return getMediaDetails(id)
+    }
+
+    /** The AniList community mean score of [id] on a 0–10 scale, or `null` when it has none yet. */
+    suspend fun getMeanScore(id: Long): Float? {
+        val media = doRequest(REQUEST_QUERY, "Media(id: $id) { meanScore }")
+            .getJSONObject("data")
+            .getJSONObject("Media")
+        return media.optInt("meanScore", 0).takeIf { it > 0 }?.let { it / 10f }
     }
 
     suspend fun getAnimeInfo(id: Long): ScrobblerContentInfo {
@@ -891,7 +923,7 @@ class AniListRepository @Inject constructor(
             targetId = json.getLong("mediaId"),
             status = json.getString("status"),
             chapter = json.getInt("progress"),
-            comment = json.getString("notes"),
+            comment = json.getStringOrNull("notes"),
             rating = scoreFormat.normalize(json.getDouble("score").toFloat()),
         )
         db.upsertScrobbling(entity)

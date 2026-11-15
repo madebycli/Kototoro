@@ -251,7 +251,29 @@ class HistoryRepository @Inject constructor(
                 ),
             )
             newChaptersUseCaseProvider.get()(manga, chapterId, percent)
-            scrobblers.forEach { it.tryScrobble(manga, chapterId) }
+            if (settings.isTrackingProgressSyncEnabled) {
+                // Tracker bindings belong to the stored title, which can differ from the one the reader opened.
+                val scrobbled = if (storedManga.id == manga.id) manga else manga.copy(id = storedManga.id)
+                scrobblers.forEach { it.tryScrobble(scrobbled, chapterId) }
+            }
+        }
+    }
+
+    /**
+     * A handle that puts [mangaId]'s history back exactly as it is now, tombstone and furthest chapter included, to
+     * undo a write made after this call. A title without history loses the one that write created.
+     */
+    suspend fun undoHandleFor(mangaId: Long): ReversibleHandle {
+        val previous = db.getHistoryDao().findIncludingDeleted(mangaId)
+        return ReversibleHandle {
+            db.withTransaction {
+                if (previous == null) {
+                    db.getHistoryDao().delete(mangaId)
+                } else {
+                    db.getHistoryDao().upsertSync(previous)
+                    db.getHistoryDao().setFurthestChapter(mangaId, previous.furthestChapterId)
+                }
+            }
         }
     }
 

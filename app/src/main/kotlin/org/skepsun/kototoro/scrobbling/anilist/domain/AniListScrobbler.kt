@@ -6,6 +6,7 @@ import org.skepsun.kototoro.scrobbling.anilist.data.AniListRepository
 import org.skepsun.kototoro.scrobbling.common.domain.Scrobbler
 import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblerService
 import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblerUser
+import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblingInfo
 import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblingStatus
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -16,6 +17,11 @@ class AniListScrobbler @Inject constructor(
     db: MangaDatabase,
     mangaRepositoryFactory: ContentRepository.Factory,
 ) : Scrobbler(db, ScrobblerService.ANILIST, repository, mangaRepositoryFactory) {
+
+    // createRate stores the entry returned by AniList, including any existing list state.
+    override val preservesRemoteStateOnBinding: Boolean = true
+
+    override suspend fun getCommunityScore(info: ScrobblingInfo): Float? = repository.getMeanScore(info.targetId)
 
     init {
         statuses[ScrobblingStatus.PLANNED] = "PLANNING"

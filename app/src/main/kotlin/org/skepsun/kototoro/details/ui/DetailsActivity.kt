@@ -200,6 +200,7 @@ class DetailsActivity :
             is DetailsAction.BindTrackingMatch -> viewModel.bindTrackingMatch(action.match)
             is DetailsAction.IgnoreTrackingSuggestion -> viewModel.ignoreTrackingSuggestion(action.match)
             is DetailsAction.RemoveTrackingMatch -> viewModel.removeTrackingMatch(action.match)
+            DetailsAction.OpenTracking -> Unit
             DetailsAction.Download -> Unit
             DetailsAction.OpenReadingRecord -> Unit
 

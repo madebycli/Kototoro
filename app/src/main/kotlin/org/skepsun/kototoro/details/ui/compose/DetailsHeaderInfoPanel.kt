@@ -98,6 +98,7 @@ import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblingStatus
 import org.skepsun.kototoro.core.ui.adaptive.LocalUiPresentationConfig
 import org.skepsun.kototoro.core.ui.adaptive.tvFocusable
 import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblerService
+import org.skepsun.kototoro.scrobbling.common.ui.scrobblerIconTint
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -549,6 +550,81 @@ internal fun RatingStatusChip(
         }
     }
 }
+
+/**
+ * Opens the tracking sheet. Until a tracker entry is linked it reads "Tracking"; afterwards it shows the linked
+ * trackers' logos and the community score of the preferred one, styled like the [RatingStatusChip] beside it.
+ */
+@Composable
+internal fun TrackingChip(
+    linkedTrackingItems: List<LinkedTrackingItemUiModel>,
+    onClick: () -> Unit,
+    chipHeight: androidx.compose.ui.unit.Dp = 32.dp,
+) {
+    val tracked = linkedTrackingItems.filter { it.hasScrobblingBinding }
+    val services = tracked.map { it.service }.distinct()
+    val communityScore = tracked
+        .sortedByDescending { it.isPreferred }
+        .firstNotNullOfOrNull { it.communityScore }
+    val shape = RoundedCornerShape(999.dp)
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .height(chipHeight)
+            .tvFocusable(shape = shape, addFocusTarget = false),
+        shape = shape,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (services.isEmpty()) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_sync),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(16.dp),
+                )
+                Text(
+                    text = stringResource(R.string.tracking_short),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                )
+            } else {
+                services.take(MAX_TRACKING_CHIP_LOGOS).forEach { service ->
+                    Icon(
+                        painter = rememberSafePainter(service.iconResId),
+                        contentDescription = stringResource(service.titleResId),
+                        tint = scrobblerIconTint(service.iconResId, MaterialTheme.colorScheme.onSurface),
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                if (services.size > MAX_TRACKING_CHIP_LOGOS) {
+                    Text(
+                        text = "+${services.size - MAX_TRACKING_CHIP_LOGOS}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                }
+                communityScore?.let { score ->
+                    Text(
+                        text = formatTrackingScore(score),
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private const val MAX_TRACKING_CHIP_LOGOS = 3
 
 @Composable
 private fun CompactRatingChip(
@@ -1038,7 +1114,7 @@ internal fun SourceOptionCard(
     }
 }
 
-private fun supportedStatusesForService(service: ScrobblerService): List<ScrobblingStatus> {
+internal fun supportedStatusesForService(service: ScrobblerService): List<ScrobblingStatus> {
     return when (service) {
         ScrobblerService.MAL,
         ScrobblerService.KITSU,

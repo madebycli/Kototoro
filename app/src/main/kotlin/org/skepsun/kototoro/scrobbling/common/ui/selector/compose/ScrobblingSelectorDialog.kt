@@ -1,9 +1,6 @@
 package org.skepsun.kototoro.scrobbling.common.ui.selector.compose
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,23 +15,25 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -46,123 +45,160 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import org.skepsun.kototoro.core.ui.adaptive.tvIconButtonRing
-import org.skepsun.kototoro.scrobbling.common.ui.scrobblerIconTint
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.recyclerview.widget.RecyclerView.NO_ID
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import org.skepsun.kototoro.R
+import org.skepsun.kototoro.core.ui.adaptive.tvFocusable
+import org.skepsun.kototoro.core.ui.adaptive.tvIconButtonRing
 import org.skepsun.kototoro.core.ui.adaptive.tvTabRing
 import org.skepsun.kototoro.core.ui.compose.rememberSafePainter
-import org.skepsun.kototoro.core.ui.compose.CompactContentCoverShape
 import org.skepsun.kototoro.core.ui.theme.KototoroTheme
 import org.skepsun.kototoro.core.util.ext.getDisplayMessage
 import org.skepsun.kototoro.list.ui.model.ListModel
 import org.skepsun.kototoro.list.ui.model.LoadingFooter
 import org.skepsun.kototoro.list.ui.model.LoadingState
 import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblerContent
+import org.skepsun.kototoro.scrobbling.common.ui.scrobblerIconTint
 import org.skepsun.kototoro.scrobbling.common.ui.selector.ScrobblingSelectorViewModel
 import org.skepsun.kototoro.scrobbling.common.ui.selector.model.ScrobblerHint
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Finds the entry to link on a tracker: a search field filled with the title, the results with their covers and a
+ * "Link" button for the picked one. With [showServiceTabs] off the sheet searches only the tracker it was opened
+ * for, which is how the details page's tracking sheet uses it; otherwise tabs switch between all trackers.
+ */
 @Composable
 fun ScrobblingSelectorDialog(
     viewModel: ScrobblingSelectorViewModel,
     onDismissRequest: () -> Unit,
     onRetry: (Throwable) -> Unit,
+    showServiceTabs: Boolean = true,
 ) {
-    var isSearchExpanded by remember { mutableStateOf(false) }
-    val focusManager = LocalFocusManager.current
+    val selectedIndex by viewModel.selectedScrobblerIndex.collectAsStateWithLifecycle()
+    val selectedItemId by viewModel.selectedItemId.collectAsStateWithLifecycle()
+    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+    val service = viewModel.availableScrobblers.getOrNull(selectedIndex)?.scrobblerService
+    val requiresLogin = service != null && !viewModel.isScrobblerAuthorized(selectedIndex)
 
-    BackHandler(enabled = isSearchExpanded) {
-        isSearchExpanded = false
-        focusManager.clearFocus()
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface),
-    ) {
-        TopAppBar(
-            title = { Text(stringResource(R.string.tracking)) },
-            navigationIcon = {
-                IconButton(onClick = onDismissRequest, modifier = Modifier.tvIconButtonRing()) {
-                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close))
-                }
-            },
-            actions = {
-                IconButton(onClick = { isSearchExpanded = !isSearchExpanded }, modifier = Modifier.tvIconButtonRing()) {
-                    Icon(
-                        imageVector = if (isSearchExpanded) Icons.Default.Close else Icons.Default.Search,
-                        contentDescription = stringResource(R.string.search),
-                    )
-                }
-            },
-        )
-
-        if (isSearchExpanded) {
-            ScrobblerSearchField(
-                onSearch = viewModel::search,
-                onClose = {
-                    isSearchExpanded = false
-                    focusManager.clearFocus()
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 20.dp, top = 12.dp, end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (!showServiceTabs && service != null) {
+                Icon(
+                    painter = rememberSafePainter(service.iconResId),
+                    contentDescription = null,
+                    tint = scrobblerIconTint(service.iconResId),
+                    modifier = Modifier.size(28.dp),
+                )
+            }
+            Text(
+                text = if (!showServiceTabs && service != null) {
+                    stringResource(R.string.tracking_search_on, stringResource(service.titleResId))
+                } else {
+                    stringResource(R.string.tracking_short)
                 },
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(onClick = onDismissRequest, modifier = Modifier.tvIconButtonRing()) {
+                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close))
+            }
+        }
+
+        ScrobblerSearchField(viewModel = viewModel)
+
+        if (showServiceTabs) {
+            ScrobblerTabs(viewModel)
+        }
+        if (requiresLogin) {
+            Text(
+                text = stringResource(R.string.scrobbler_search_auth_hint, stringResource(service.titleResId)),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
             )
         }
 
-        ScrobblerTabs(viewModel)
         ScrobblerListContent(
             viewModel = viewModel,
             onRetry = onRetry,
-            onRequestSearch = { isSearchExpanded = true },
+            modifier = Modifier.weight(1f),
         )
+
+        Button(
+            onClick = viewModel::onDoneClick,
+            enabled = !isLoading && (requiresLogin || selectedItemId != NO_ID),
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 12.dp)
+                .heightIn(min = 52.dp),
+        ) {
+            if (isLoading && selectedItemId != NO_ID) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp,
+                    color = LocalContentColor.current,
+                )
+            } else {
+                Text(stringResource(if (requiresLogin) R.string.sign_in else R.string.tracking_link_action))
+            }
+        }
     }
 }
 
+/** Search text for the current tracker; it starts as the title and searches again on the keyboard's search key. */
 @Composable
-private fun ScrobblerSearchField(
-    onSearch: (String) -> Unit,
-    onClose: () -> Unit,
-) {
-    var query by remember { mutableStateOf("") }
+private fun ScrobblerSearchField(viewModel: ScrobblingSelectorViewModel) {
+    val searchedQuery by viewModel.query.collectAsStateWithLifecycle()
+    var query by remember(searchedQuery) { mutableStateOf(searchedQuery) }
     val focusManager = LocalFocusManager.current
     val submit = {
-        if (query.length >= 3) {
-            onSearch(query)
-            query = ""
-            onClose()
+        val trimmed = query.trim()
+        if (trimmed.isNotEmpty()) {
+            viewModel.search(trimmed)
             focusManager.clearFocus()
         }
     }
-
     OutlinedTextField(
         value = query,
         onValueChange = { query = it },
         modifier = Modifier
             .fillMaxWidth()
-            .padding(
-                start = dimensionResource(R.dimen.list_spacing_normal),
-                end = dimensionResource(R.dimen.list_spacing_normal),
-                bottom = dimensionResource(R.dimen.list_spacing_small),
-            ),
+            .padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 4.dp),
         placeholder = { Text(stringResource(R.string.search)) },
-        trailingIcon = {
-                IconButton(onClick = submit, modifier = Modifier.tvIconButtonRing()) {
-                    Icon(Icons.Default.Search, contentDescription = stringResource(R.string.search))
+        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+        trailingIcon = if (query.isNotEmpty()) {
+            {
+                IconButton(onClick = { query = "" }, modifier = Modifier.tvIconButtonRing()) {
+                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.clear))
                 }
-            },
+            }
+        } else {
+            null
+        },
         singleLine = true,
+        shape = RoundedCornerShape(16.dp),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         keyboardActions = KeyboardActions(onSearch = { submit() }),
     )
@@ -173,84 +209,45 @@ private fun ScrobblerTabs(viewModel: ScrobblingSelectorViewModel) {
     val selectedIndex by viewModel.selectedScrobblerIndex.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val scrobblers = viewModel.availableScrobblers
-    val selectedService = scrobblers.getOrNull(selectedIndex)?.scrobblerService
-    val requiresLogin = selectedIndex in scrobblers.indices && !viewModel.isScrobblerAuthorized(selectedIndex)
-
-    if (scrobblers.isNotEmpty()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ScrollableTabRow(
-                selectedTabIndex = selectedIndex,
-                modifier = Modifier.weight(1f),
-                edgePadding = dimensionResource(R.dimen.list_spacing_normal),
-                divider = {},
-                containerColor = Color.Transparent,
-            ) {
-                scrobblers.forEachIndexed { index, scrobbler ->
-                    val title = stringResource(scrobbler.scrobblerService.titleResId)
-                    Tab(
-                        modifier = Modifier.tvTabRing(),
-                        selected = selectedIndex == index,
-                        onClick = { if (!isLoading) viewModel.setScrobblerIndex(index) },
-                        text = {
-                            Text(
-                                text = if (viewModel.isScrobblerAuthorized(index)) {
-                                    title
-                                } else {
-                                    stringResource(
-                                        R.string.scrobbler_search_requires_login_label,
-                                        title,
-                                        stringResource(R.string.filter_need_login),
-                                    )
-                                },
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
+    if (scrobblers.isEmpty()) return
+    ScrollableTabRow(
+        selectedTabIndex = selectedIndex,
+        modifier = Modifier.fillMaxWidth(),
+        edgePadding = 16.dp,
+        divider = {},
+        containerColor = Color.Transparent,
+    ) {
+        scrobblers.forEachIndexed { index, scrobbler ->
+            val title = stringResource(scrobbler.scrobblerService.titleResId)
+            Tab(
+                modifier = Modifier.tvTabRing(),
+                selected = selectedIndex == index,
+                onClick = { if (!isLoading) viewModel.setScrobblerIndex(index) },
+                text = {
+                    Text(
+                        text = if (viewModel.isScrobblerAuthorized(index)) {
+                            title
+                        } else {
+                            stringResource(
+                                R.string.scrobbler_search_requires_login_label,
+                                title,
+                                stringResource(R.string.filter_need_login),
                             )
                         },
-                        icon = {
-                            Icon(
-                                painter = rememberSafePainter(scrobbler.scrobblerService.iconResId),
-                                contentDescription = null,
-                                tint = scrobblerIconTint(scrobbler.scrobblerService.iconResId),
-                                modifier = Modifier.size(24.dp),
-                            )
-                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
-                }
-            }
-
-            IconButton(
-                onClick = viewModel::onDoneClick,
-                enabled = !isLoading,
-                modifier = Modifier.padding(end = dimensionResource(R.dimen.toolbar_button_margin)).tvIconButtonRing(),
-            ) {
-                Icon(
-                    painter = rememberSafePainter(
-                        if (requiresLogin) R.drawable.ic_lock else R.drawable.ic_check,
-                    ),
-                    contentDescription = stringResource(if (requiresLogin) R.string.sign_in else R.string.done),
-                )
-            }
+                },
+                icon = {
+                    Icon(
+                        painter = rememberSafePainter(scrobbler.scrobblerService.iconResId),
+                        contentDescription = null,
+                        tint = scrobblerIconTint(scrobbler.scrobblerService.iconResId),
+                        modifier = Modifier.size(24.dp),
+                    )
+                },
+            )
         }
-    }
-
-    if (requiresLogin && selectedService != null) {
-        Text(
-            text = stringResource(
-                R.string.scrobbler_search_auth_hint,
-                stringResource(selectedService.titleResId),
-            ),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(
-                start = dimensionResource(R.dimen.list_spacing_normal),
-                top = dimensionResource(R.dimen.list_spacing_small),
-                end = dimensionResource(R.dimen.list_spacing_normal),
-                bottom = dimensionResource(R.dimen.list_spacing_small),
-            ),
-        )
     }
 }
 
@@ -258,7 +255,7 @@ private fun ScrobblerTabs(viewModel: ScrobblingSelectorViewModel) {
 private fun ScrobblerListContent(
     viewModel: ScrobblingSelectorViewModel,
     onRetry: (Throwable) -> Unit,
-    onRequestSearch: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val items by viewModel.content.collectAsStateWithLifecycle()
     val selectedItemId by viewModel.selectedItemId.collectAsStateWithLifecycle()
@@ -282,16 +279,9 @@ private fun ScrobblerListContent(
 
     LazyColumn(
         state = listState,
-        modifier = Modifier
-            .fillMaxSize()
-            .navigationBarsPadding(),
-        contentPadding = PaddingValues(
-            start = dimensionResource(R.dimen.list_spacing_normal),
-            top = dimensionResource(R.dimen.list_spacing_normal),
-            end = dimensionResource(R.dimen.list_spacing_normal),
-            bottom = dimensionResource(R.dimen.list_spacing_normal),
-        ),
-        verticalArrangement = Arrangement.spacedBy(dimensionResource(R.dimen.list_spacing_normal)),
+        modifier = modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(
             items = items,
@@ -306,7 +296,7 @@ private fun ScrobblerListContent(
                 )
                 is ScrobblerHint -> ScrobblerHintItem(
                     item = item,
-                    onRetry = { error -> error?.let(onRetry) ?: onRequestSearch() },
+                    onRetry = { error -> error?.let(onRetry) },
                 )
                 is LoadingState -> LoadingItem()
                 is LoadingFooter -> LoadingFooterItem()
@@ -322,19 +312,24 @@ private fun ScrobblerContentItem(
     onClick: () -> Unit,
 ) {
     val context = LocalContext.current
-    val border = if (isSelected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null
+    val shape = RoundedCornerShape(18.dp)
     Surface(
+        onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.small)
-            .clickable(onClick = onClick),
-        shape = MaterialTheme.shapes.small,
-        border = border,
-        color = MaterialTheme.colorScheme.surface,
+            .tvFocusable(shape = shape, addFocusTarget = false),
+        shape = shape,
+        color = if (isSelected) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f)
+        },
+        border = if (isSelected) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null,
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+            modifier = Modifier.padding(10.dp),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             AsyncImage(
                 model = ImageRequest.Builder(context)
@@ -346,19 +341,18 @@ private fun ScrobblerContentItem(
                 placeholder = rememberSafePainter(R.drawable.ic_placeholder),
                 error = rememberSafePainter(R.drawable.ic_placeholder),
                 modifier = Modifier
-                    .size(40.dp)
-                    .clip(CompactContentCoverShape),
+                    .size(width = 52.dp, height = 74.dp)
+                    .clip(RoundedCornerShape(10.dp)),
             )
             Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(start = 16.dp, end = 8.dp),
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = item.name,
-                        style = MaterialTheme.typography.titleSmall,
-                        maxLines = 1,
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
                     )
@@ -371,7 +365,7 @@ private fun ScrobblerContentItem(
                         )
                     }
                 }
-                item.altName?.takeIf(String::isNotBlank)?.let { altName ->
+                item.altName?.takeIf { it.isNotBlank() && it != item.name }?.let { altName ->
                     Text(
                         text = altName,
                         style = MaterialTheme.typography.bodySmall,
@@ -380,6 +374,25 @@ private fun ScrobblerContentItem(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+                listOfNotNull(item.subtitle, item.progressText)
+                    .filter { it.isNotBlank() }
+                    .takeIf { it.isNotEmpty() }
+                    ?.let { facts ->
+                        Text(
+                            text = facts.joinToString(" · "),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+            }
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
             }
         }
     }
@@ -419,7 +432,7 @@ private fun ScrobblerHintItem(
                     modifier = Modifier.padding(top = dimensionResource(R.dimen.margin_small)),
                 )
             }
-            if (item.actionStringRes != 0) {
+            if (item.actionStringRes != 0 && item.error != null) {
                 FilledTonalButton(
                     onClick = { onRetry(item.error) },
                     modifier = Modifier.padding(top = dimensionResource(R.dimen.margin_small)),

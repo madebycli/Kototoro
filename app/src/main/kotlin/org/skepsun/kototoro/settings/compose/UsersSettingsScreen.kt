@@ -53,6 +53,7 @@ data class UsersSettingsUiState(
     val accounts: List<UserTrackingAccountItem>,
     val preferredTrackingSite: ScrobblerService,
     val preferredTrackingSiteOptions: List<SettingsChoiceOption<ScrobblerService>>,
+    val isProgressSyncEnabled: Boolean = true,
 )
 
 @Composable
@@ -64,6 +65,7 @@ fun UsersSettingsScreen(
     onDismissAuthPrompt: () -> Unit,
     onConfirmAuthPrompt: (ScrobblerService) -> Unit,
     onPreferredTrackingSiteChange: (ScrobblerService) -> Unit,
+    onProgressSyncChange: (Boolean) -> Unit,
     onTrackingServiceClick: (ScrobblerService) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -111,6 +113,19 @@ fun UsersSettingsScreen(
                                 onClick = { onTrackingServiceClick(account.service) },
                             )
                         }
+                    }
+                }
+            }
+            item(key = "tracking_sync") {
+                SettingsPreferenceGroup(title = stringResource(R.string.tracking)) {
+                    item {
+                        SettingsSwitchPreference(
+                            title = stringResource(R.string.tracking_progress_sync),
+                            iconRes = R.drawable.ic_sync,
+                            summary = stringResource(R.string.tracking_progress_sync_summary),
+                            checked = state.isProgressSyncEnabled,
+                            onCheckedChange = onProgressSyncChange,
+                        )
                     }
                 }
             }

@@ -24,6 +24,12 @@ class MALScrobbler @Inject constructor(
     mangaRepositoryFactory: ContentRepository.Factory,
 ) : Scrobbler(db, ScrobblerService.MAL, repository, mangaRepositoryFactory) {
 
+    // createRate imports the entry already on the user's list instead of writing a new one.
+    override val preservesRemoteStateOnBinding: Boolean = true
+
+    override suspend fun getCommunityScore(info: ScrobblingInfo): Float? =
+        repository.getMeanScore(info.targetId, info.mangaId, info.mediaType)
+
     init {
         statuses[ScrobblingStatus.PLANNED] = "plan_to_read"
         statuses[ScrobblingStatus.READING] = "reading"

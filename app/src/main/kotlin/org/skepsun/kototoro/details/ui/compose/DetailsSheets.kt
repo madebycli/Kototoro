@@ -92,7 +92,7 @@ private fun DetailsPlainBottomSheet(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DetailsTranslucentBottomSheet(
+internal fun DetailsTranslucentBottomSheet(
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,

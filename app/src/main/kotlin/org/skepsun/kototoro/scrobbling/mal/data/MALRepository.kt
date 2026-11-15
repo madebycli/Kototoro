@@ -223,6 +223,18 @@ class MALRepository @Inject constructor(
         return contentType == org.skepsun.kototoro.parsers.model.ContentType.VIDEO || contentType == org.skepsun.kototoro.parsers.model.ContentType.HENTAI_VIDEO
     }
 
+    /** The MyAnimeList community mean score of [id] on a 0–10 scale, or `null` when it has none yet. */
+    suspend fun getMeanScore(id: Long, mangaId: Long, mediaType: String?): Float? {
+        val endpoint = resolvedEndpoint(id, mangaId, mediaType.orEmpty())
+        val url = BASE_API_URL.toHttpUrl().newBuilder()
+            .addPathSegment(endpoint)
+            .addPathSegment(id.toString())
+            .addQueryParameter("fields", "mean")
+            .build()
+        val json = okHttp.newCall(Request.Builder().url(url).get().build()).await().parseJson()
+        return json.optDouble("mean").takeIf { !it.isNaN() && it > 0.0 }?.toFloat()
+    }
+
     override suspend fun getContentInfo(id: Long): ScrobblerContentInfo {
         val endpoint = db.getScrobblingDao()
             .findAllByTargetId(ScrobblerService.MAL.id, id)
@@ -358,10 +370,14 @@ class MALRepository @Inject constructor(
         return baseInfo.withSupplemental(supplemental)
     }
 
-    override suspend fun createRate(mangaId: Long, content: ScrobblerContent) {
+    override suspend fun createRate(mangaId: Long, content: ScrobblerContent): Boolean {
         val scrobblerContentId = content.id
         content.mediaType?.let { rememberEndpoint(scrobblerContentId, it) }
         val endpoint = content.mediaType ?: resolvedEndpoint(scrobblerContentId, mangaId, "")
+        findListStatus(scrobblerContentId, endpoint)?.let { details ->
+            saveRate(details, mangaId, scrobblerContentId, endpoint)
+            return false
+        }
         val body = FormBody.Builder()
             .add("status", defaultStatus(endpoint == ANIME_ENDPOINT))
             .add("score", "0")
@@ -377,6 +393,29 @@ class MALRepository @Inject constructor(
             .build()
         val response = okHttp.newCall(request).await().parseJson()
         saveRate(response, mangaId, scrobblerContentId, endpoint)
+        return true
+    }
+
+    override suspend fun refreshRate(mangaId: Long, targetId: Long, mediaType: String): Boolean {
+        val endpoint = resolvedEndpoint(targetId, mangaId, mediaType)
+        val details = findListStatus(targetId, endpoint) ?: return false
+        saveRate(details, mangaId, targetId, endpoint)
+        return true
+    }
+
+    /**
+     * The details of [id] with the user's `my_list_status`, or `null` when it is not on their list. Throws when the
+     * entry cannot be read, so a failed lookup is never mistaken for an empty list.
+     */
+    private suspend fun findListStatus(id: Long, endpoint: String): JSONObject? {
+        val url = BASE_API_URL.toHttpUrl().newBuilder()
+            .addPathSegment(endpoint)
+            .addPathSegment(id.toString())
+            .addQueryParameter("fields", "my_list_status{status,score,${progressField(endpoint)},comments}")
+            .build()
+        val details = okHttp.newCall(Request.Builder().url(url).get().build()).await().parseJson()
+        check(details.optLong("id", -1L) == id) { "Could not read the MAL list entry" }
+        return details.takeIf { it.optJSONObject("my_list_status") != null }
     }
 
     override suspend fun updateRate(rateId: Int, mangaId: Long, chapter: Int) {

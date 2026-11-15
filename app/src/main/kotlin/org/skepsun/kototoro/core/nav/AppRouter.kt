@@ -1261,12 +1261,17 @@ class AppRouter(
         }
     }
 
-    fun showScrobblingSelectorSheet(manga: Content, scrobblerService: ScrobblerService?) {
+    fun showScrobblingSelectorSheet(
+        manga: Content,
+        scrobblerService: ScrobblerService?,
+        addToFavourites: Boolean = true,
+    ) {
         val composeActivity = activity as? BaseComposeActivity ?: return
         composeActivity.showComposeModal {
             ScrobblingSelectorSheetRoute(
                 manga = manga,
                 scrobblerServiceId = scrobblerService?.id ?: -1,
+                addToFavourites = addToFavourites,
                 onDismissRequest = composeActivity::dismissComposeModal,
             )
         }
