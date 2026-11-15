@@ -43,6 +43,11 @@ import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblingStatus
 import org.skepsun.kototoro.scrobbling.common.ui.selector.model.ScrobblerHint
 import javax.inject.Inject
 
+internal val INDEPENDENT_TRACKING_SERVICES = setOf(
+    org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblerService.ANILIST,
+    org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblerService.MAL,
+)
+
 @HiltViewModel
 class ScrobblingSelectorViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
@@ -69,7 +74,9 @@ class ScrobblingSelectorViewModel @Inject constructor(
 
     fun requireStatePreservingServices() {
         independentTracking = true
-        val safeServices = allScrobblers.filter { it.preservesRemoteStateOnBinding }
+        val safeServices = allScrobblers.filter {
+            it.scrobblerService in INDEPENDENT_TRACKING_SERVICES && it.preservesRemoteStateOnBinding
+        }
         if (availableScrobblers == safeServices) return
         initJob?.cancel()
         loadingJob?.cancel()

@@ -29,7 +29,7 @@ import org.skepsun.kototoro.core.ui.theme.KototoroTheme
 import org.skepsun.kototoro.core.util.ext.findActivity
 import org.skepsun.kototoro.details.ui.DetailsViewModel
 import org.skepsun.kototoro.tracking.discovery.domain.TrackingSiteDiscoveryService
-import org.skepsun.kototoro.scrobbling.common.domain.model.ScrobblerService
+import org.skepsun.kototoro.scrobbling.common.ui.selector.INDEPENDENT_TRACKING_SERVICES
 
 @EntryPoint
 @InstallIn(SingletonComponent::class)
@@ -92,7 +92,7 @@ fun ScrobblingInfoSheetRoute(
                         router?.openExternalBrowser(url, context.getString(R.string.open_in_browser)) ?: false
                     },
                     onEdit = { service ->
-                        if (service !in setOf(ScrobblerService.ANILIST, ScrobblerService.MANGABAKA, ScrobblerService.MAL)) {
+                        if (service !in INDEPENDENT_TRACKING_SERVICES) {
                             Toast.makeText(context, R.string.tracking_supported_services, Toast.LENGTH_LONG).show()
                         } else {
                             viewModel.manga.value?.let { manga ->

@@ -4090,5 +4090,5 @@
     <string name="tracking_progress_edit">Fortschritt</string>
     <string name="tracking_score_value">Bewertung: %1$d%%</string>
     <string name="tracking_community_score">%1$s: %2$s ★</string>
-    <string name="tracking_supported_services">Neue Verknüpfungen unterstützen derzeit AniList, MyAnimeList und MangaBaka. Bestehender Online-Fortschritt bleibt erhalten.</string>
+    <string name="tracking_supported_services">Neue Verknüpfungen unterstützen derzeit AniList und MyAnimeList. Bestehender Online-Fortschritt bleibt erhalten.</string>
 </resources>

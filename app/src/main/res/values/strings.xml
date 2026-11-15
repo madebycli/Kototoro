@@ -4225,5 +4225,5 @@
     <string name="tracking_progress_edit">Progress</string>
     <string name="tracking_score_value">Score: %1$d%%</string>
     <string name="tracking_community_score">%1$s: %2$s ★</string>
-    <string name="tracking_supported_services">New links currently support AniList, MyAnimeList and MangaBaka, which preserve existing remote progress.</string>
+    <string name="tracking_supported_services">New links currently support AniList and MyAnimeList, which preserve existing remote progress.</string>
 </resources>
