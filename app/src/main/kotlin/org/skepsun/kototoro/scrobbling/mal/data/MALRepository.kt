@@ -365,7 +365,7 @@ class MALRepository @Inject constructor(
         val detailsUrl = BASE_API_URL.toHttpUrl().newBuilder()
             .addPathSegment(endpoint)
             .addPathSegment(scrobblerContentId.toString())
-            .addQueryParameter("fields", "my_list_status")
+            .addQueryParameter("fields", "my_list_status{status,score,${progressField(endpoint)},comments}")
             .build()
         val details = okHttp.newCall(Request.Builder().url(detailsUrl).get().build()).await().parseJson()
         check(details.optLong("id", -1L) == scrobblerContentId) { "Could not read the MAL list entry" }
