@@ -186,3 +186,55 @@ private fun MarkdownSpan.Text.toSpanStyle(style: TextStyle): SpanStyle = SpanSty
     textDecoration = if (strikeThrough) TextDecoration.LineThrough else null,
     fontFamily = if (code) FontFamily.Monospace else style.fontFamily,
 )
+
+/** A single text layout for descriptions, retaining source line breaks and supporting collapsed layouts. */
+@Composable
+fun descriptionAnnotatedString(markdown: String): AnnotatedString {
+    val blocks = remember(markdown) { parseMarkdownBlocks(markdown, preserveLineBreaks = true) }
+    val linkColor = MaterialTheme.colorScheme.primary
+    return remember(blocks, linkColor) {
+        buildAnnotatedString {
+            blocks.forEachIndexed { index, block ->
+                if (index > 0) {
+                    val previous = blocks[index - 1]
+                    append(if (previous is MarkdownBlock.ListItem && block is MarkdownBlock.ListItem) "\n" else "\n\n")
+                }
+                val content = when (block) {
+                    is MarkdownBlock.Heading -> block.text
+                    is MarkdownBlock.Paragraph -> block.text
+                    is MarkdownBlock.Quote -> "❯ ${block.text}"
+                    is MarkdownBlock.ListItem -> "  ".repeat(block.depth) + block.marker + " " + block.text
+                    is MarkdownBlock.Code -> block.text
+                    MarkdownBlock.Rule -> "────────"
+                }
+                if (block is MarkdownBlock.Code) {
+                    withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) { append(content) }
+                } else {
+                    parseMarkdownInline(content).forEach { span ->
+                        when (span) {
+                            is MarkdownSpan.Text -> withStyle(
+                                SpanStyle(
+                                    fontWeight = if (span.bold || block is MarkdownBlock.Heading) FontWeight.SemiBold else null,
+                                    fontStyle = if (span.italic) FontStyle.Italic else null,
+                                    textDecoration = if (span.strikeThrough) TextDecoration.LineThrough else null,
+                                    fontFamily = if (span.code) FontFamily.Monospace else null,
+                                ),
+                            ) { append(span.text) }
+                            is MarkdownSpan.Link -> {
+                                if (span.url.startsWith("https://", ignoreCase = true) ||
+                                    span.url.startsWith("http://", ignoreCase = true)
+                                ) {
+                                    withLink(LinkAnnotation.Url(span.url, TextLinkStyles(
+                                        style = SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline),
+                                    ))) { append(span.text) }
+                                } else {
+                                    append(span.text)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

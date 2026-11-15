@@ -37,6 +37,32 @@ class MarkdownBlocksTest {
     }
 
     @Test
+    fun `description mode retains source line breaks alongside markdown blocks`() {
+        val blocks = parseMarkdownBlocks(
+            "**Year:** 2024\n[AniList](https://anilist.co)\n\n- First\n- Second\n\n---\n\nPlain text",
+            preserveLineBreaks = true,
+        )
+        assertEquals(
+            listOf(
+                MarkdownBlock.Paragraph("**Year:** 2024\n[AniList](https://anilist.co)"),
+                MarkdownBlock.ListItem("•", "First"),
+                MarkdownBlock.ListItem("•", "Second"),
+                MarkdownBlock.Rule,
+                MarkdownBlock.Paragraph("Plain text"),
+            ),
+            blocks,
+        )
+        assertEquals(
+            listOf(MarkdownSpan.Text("Year:", bold = true), MarkdownSpan.Text(" 2024")),
+            parseMarkdownInline("**Year:** 2024"),
+        )
+        assertEquals(
+            listOf(MarkdownSpan.Link("AniList", "https://anilist.co")),
+            parseMarkdownInline("[AniList](https://anilist.co)"),
+        )
+    }
+
+    @Test
     fun `blank lines separate paragraphs`() {
         val blocks = parseMarkdownBlocks("one\n\ntwo\n\n\ntwo follows")
 

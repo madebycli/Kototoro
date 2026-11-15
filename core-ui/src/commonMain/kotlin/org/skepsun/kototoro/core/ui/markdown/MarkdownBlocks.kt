@@ -49,7 +49,7 @@ sealed interface MarkdownSpan {
  * unclosed fence keeps the rest as code, an unclosed inline marker stays literal, and HTML comments (which the
  * generator leaves behind as release-template placeholders) never reach the screen.
  */
-fun parseMarkdownBlocks(markdown: String): List<MarkdownBlock> {
+fun parseMarkdownBlocks(markdown: String, preserveLineBreaks: Boolean = false): List<MarkdownBlock> {
     val lines = stripComments(markdown).replace("\r\n", "\n").replace('\r', '\n').split('\n')
     val blocks = ArrayList<MarkdownBlock>()
     val paragraph = ArrayList<String>()
@@ -57,7 +57,7 @@ fun parseMarkdownBlocks(markdown: String): List<MarkdownBlock> {
 
     fun flushParagraph() {
         if (paragraph.isEmpty()) return
-        val text = joinLines(paragraph)
+        val text = joinLines(paragraph, preserveLineBreaks)
         paragraph.clear()
         if (text.isNotEmpty()) blocks += MarkdownBlock.Paragraph(text)
     }
@@ -110,7 +110,7 @@ fun parseMarkdownBlocks(markdown: String): List<MarkdownBlock> {
                     quote += lines[index].trim().removePrefix(">").removePrefix(" ").trimEnd()
                     index++
                 }
-                blocks += MarkdownBlock.Quote(joinLines(quote))
+                blocks += MarkdownBlock.Quote(joinLines(quote, preserveLineBreaks))
             }
 
             else -> {
@@ -284,13 +284,13 @@ private fun depthOf(indent: String): Int =
  * Joins the lines of one paragraph the way Markdown does: a soft break becomes a space, a hard break (two trailing
  * spaces or a trailing backslash) stays a newline.
  */
-private fun joinLines(lines: List<String>): String {
+private fun joinLines(lines: List<String>, preserveLineBreaks: Boolean = false): String {
     val builder = StringBuilder()
     lines.forEachIndexed { position, raw ->
         if (position > 0) {
             val previous = lines[position - 1]
             val previousBreak = previous.endsWith("  ") || previous.endsWith("\\")
-            builder.append(if (previousBreak) '\n' else ' ')
+            builder.append(if (previousBreak || preserveLineBreaks) '\n' else ' ')
         }
         builder.append(raw.removeSuffix("\\").trim())
     }

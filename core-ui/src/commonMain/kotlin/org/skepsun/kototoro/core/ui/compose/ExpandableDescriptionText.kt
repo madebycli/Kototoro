@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import org.skepsun.kototoro.core.ui.adaptive.tvFocusable
+import org.skepsun.kototoro.core.ui.markdown.descriptionAnnotatedString
 
 /**
  * The details description (Android's `DetailsHeader`): collapsed to [collapsedMaxLines] with the last lines fading
@@ -40,8 +41,9 @@ fun ExpandableDescriptionText(
 ) {
     var canExpand by remember(text) { mutableStateOf(false) }
     val baseStyle = MaterialTheme.typography.bodyMedium
+    val formattedText = descriptionAnnotatedString(text)
     Text(
-        text = text,
+        text = formattedText,
         style = if (lineHeight != TextUnit.Unspecified) baseStyle.copy(lineHeight = lineHeight) else baseStyle,
         color = MaterialTheme.colorScheme.onSurface,
         modifier = modifier
