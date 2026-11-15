@@ -186,3 +186,64 @@ private fun MarkdownSpan.Text.toSpanStyle(style: TextStyle): SpanStyle = SpanSty
     textDecoration = if (strikeThrough) TextDecoration.LineThrough else null,
     fontFamily = if (code) FontFamily.Monospace else style.fontFamily,
 )
+
+/**
+ * A source description as one [AnnotatedString], so the details page can collapse it to a few lines and fade it out.
+ * Unlike [MarkdownText] it keeps the description's own line breaks and links bare `http(s)` URLs; see
+ * [parseMarkdownInline]'s description mode.
+ */
+@Composable
+fun rememberDescriptionAnnotatedString(markdown: String): AnnotatedString {
+    val linkColor = MaterialTheme.colorScheme.primary
+    return remember(markdown, linkColor) { buildDescriptionAnnotatedString(markdown, linkColor) }
+}
+
+/** Builds [rememberDescriptionAnnotatedString]'s text; only `http` and `https` links become clickable. */
+fun buildDescriptionAnnotatedString(markdown: String, linkColor: Color): AnnotatedString {
+    val blocks = parseMarkdownBlocks(markdown, preserveLineBreaks = true)
+    val linkStyles = TextLinkStyles(style = SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline))
+    return buildAnnotatedString {
+        blocks.forEachIndexed { index, block ->
+            if (index > 0) {
+                val previous = blocks[index - 1]
+                append(if (previous is MarkdownBlock.ListItem && block is MarkdownBlock.ListItem) "\n" else "\n\n")
+            }
+            val content = when (block) {
+                is MarkdownBlock.Heading -> block.text
+                is MarkdownBlock.Paragraph -> block.text
+                is MarkdownBlock.Quote -> "❯ ${block.text}"
+                is MarkdownBlock.ListItem -> "  ".repeat(block.depth) + block.marker + " " + block.text
+                is MarkdownBlock.Code -> block.text
+                MarkdownBlock.Rule -> DESCRIPTION_RULE
+            }
+            if (block is MarkdownBlock.Code) {
+                withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) { append(content) }
+                return@forEachIndexed
+            }
+            val isHeading = block is MarkdownBlock.Heading
+            parseMarkdownInline(content, descriptionMode = true).forEach { span ->
+                when (span) {
+                    is MarkdownSpan.Text -> withStyle(
+                        SpanStyle(
+                            fontWeight = if (span.bold || isHeading) FontWeight.SemiBold else null,
+                            fontStyle = if (span.italic) FontStyle.Italic else null,
+                            textDecoration = if (span.strikeThrough) TextDecoration.LineThrough else null,
+                            fontFamily = if (span.code) FontFamily.Monospace else null,
+                        ),
+                    ) { append(span.text) }
+
+                    is MarkdownSpan.Link -> if (span.url.isWebUrl()) {
+                        withLink(LinkAnnotation.Url(span.url, linkStyles)) { append(span.text) }
+                    } else {
+                        append(span.text)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private const val DESCRIPTION_RULE = "────────"
+
+private fun String.isWebUrl(): Boolean =
+    startsWith("https://", ignoreCase = true) || startsWith("http://", ignoreCase = true)

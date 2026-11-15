@@ -539,15 +539,19 @@ class DetailsLoadUseCase @Inject constructor(
         return result
     }
 
-    private suspend fun String.parseAsHtml(withImages: Boolean): CharSequence? = if (withImages) {
-        runInterruptible(Dispatchers.IO) {
-            parseAsHtml(imageGetter = imageGetter)
-        }?.filterSpans()
-    } else {
-        runInterruptible(Dispatchers.Default) {
-            parseAsHtml()
-        }?.filterSpans()?.sanitize()
-    }?.trim()?.nullIfEmpty()
+    private suspend fun String.parseAsHtml(withImages: Boolean): CharSequence? {
+        // Plain-text and Markdown descriptions keep their line breaks; see descriptionHtmlSource.
+        val html = descriptionHtmlSource(this) ?: return sanitize().trim().nullIfEmpty()
+        return if (withImages) {
+            runInterruptible(Dispatchers.IO) {
+                html.parseAsHtml(imageGetter = imageGetter)
+            }?.filterSpans()
+        } else {
+            runInterruptible(Dispatchers.Default) {
+                html.parseAsHtml()
+            }?.filterSpans()?.sanitize()
+        }?.trim()?.nullIfEmpty()
+    }
 
     private fun Spanned?.filterSpans(): Spanned? {
         val spannable = SpannableString.valueOf(this ?: return null)

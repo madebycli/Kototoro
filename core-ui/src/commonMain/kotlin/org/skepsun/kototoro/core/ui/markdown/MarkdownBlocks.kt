@@ -49,7 +49,7 @@ sealed interface MarkdownSpan {
  * unclosed fence keeps the rest as code, an unclosed inline marker stays literal, and HTML comments (which the
  * generator leaves behind as release-template placeholders) never reach the screen.
  */
-fun parseMarkdownBlocks(markdown: String): List<MarkdownBlock> {
+fun parseMarkdownBlocks(markdown: String, preserveLineBreaks: Boolean = false): List<MarkdownBlock> {
     val lines = stripComments(markdown).replace("\r\n", "\n").replace('\r', '\n').split('\n')
     val blocks = ArrayList<MarkdownBlock>()
     val paragraph = ArrayList<String>()
@@ -57,7 +57,7 @@ fun parseMarkdownBlocks(markdown: String): List<MarkdownBlock> {
 
     fun flushParagraph() {
         if (paragraph.isEmpty()) return
-        val text = joinLines(paragraph)
+        val text = joinLines(paragraph, preserveLineBreaks)
         paragraph.clear()
         if (text.isNotEmpty()) blocks += MarkdownBlock.Paragraph(text)
     }
@@ -110,7 +110,7 @@ fun parseMarkdownBlocks(markdown: String): List<MarkdownBlock> {
                     quote += lines[index].trim().removePrefix(">").removePrefix(" ").trimEnd()
                     index++
                 }
-                blocks += MarkdownBlock.Quote(joinLines(quote))
+                blocks += MarkdownBlock.Quote(joinLines(quote, preserveLineBreaks))
             }
 
             else -> {
@@ -162,8 +162,12 @@ fun parseMarkdownBlocks(markdown: String): List<MarkdownBlock> {
  *
  * Emphases do not nest: `**bold**` inside a link label is reported as part of the [MarkdownSpan.Link]. Underscore
  * emphases must sit on word boundaries, so `snake_case_name` stays literal.
+ *
+ * [descriptionMode] reads source descriptions, which are mostly plain text: bare and `<…>` HTTP(S) URLs become links,
+ * emphasis needs CommonMark flanking (`5 * 3 * 2` stays literal), a backslash only escapes Markdown punctuation
+ * (`C:\books` keeps it), and angle brackets that are not a link or `<br>` stay text (`<3`).
  */
-fun parseMarkdownInline(markdown: String): List<MarkdownSpan> {
+fun parseMarkdownInline(markdown: String, descriptionMode: Boolean = false): List<MarkdownSpan> {
     val spans = ArrayList<MarkdownSpan>()
     val literal = StringBuilder()
     var index = 0
@@ -176,16 +180,41 @@ fun parseMarkdownInline(markdown: String): List<MarkdownSpan> {
 
     while (index < markdown.length) {
         val char = markdown[index]
+        val urlEnd = if (descriptionMode) bareUrlEnd(markdown, index) else -1
+        if (urlEnd > index) {
+            flush()
+            val url = markdown.substring(index, urlEnd)
+            spans += MarkdownSpan.Link(url, url)
+            index = urlEnd
+            continue
+        }
         if (char == '<') {
             val close = markdown.indexOf('>', index + 1)
             if (close > index) {
-                val tag = markdown.substring(index + 1, close).trim().lowercase()
-                if (tag == "br" || tag == "br/") literal.append('\n')
-                index = close + 1
-                continue
+                val inner = markdown.substring(index + 1, close)
+                if (descriptionMode && !inner.any(Char::isWhitespace) &&
+                    (inner.startsWith("https://", true) || inner.startsWith("http://", true))
+                ) {
+                    flush()
+                    spans += MarkdownSpan.Link(inner, inner)
+                    index = close + 1
+                    continue
+                }
+                val tag = inner.trim().lowercase()
+                if (tag == "br" || tag == "br/") {
+                    literal.append('\n')
+                    index = close + 1
+                    continue
+                }
+                if (!descriptionMode) {
+                    index = close + 1
+                    continue
+                }
             }
         }
-        if (char == '\\' && index + 1 < markdown.length) {
+        if (char == '\\' && index + 1 < markdown.length &&
+            (!descriptionMode || markdown[index + 1] in "\\`*_{}[]()#+-.!>~")
+        ) {
             literal.append(markdown[index + 1])
             index += 2
             continue
@@ -201,14 +230,14 @@ fun parseMarkdownInline(markdown: String): List<MarkdownSpan> {
                 continue
             }
         }
-        val marker = markerAt(markdown, index)
+        val marker = markerAt(markdown, index)?.takeUnless { descriptionMode && !opensRun(markdown, index, it) }
         if (marker == null) {
             literal.append(char)
             index++
             continue
         }
         val start = index + marker.length
-        val end = closingMarker(markdown, marker, start)
+        val end = closingMarker(markdown, marker, start, requireFlanking = descriptionMode)
         if (end <= start) {
             literal.append(marker)
             index = start
@@ -243,16 +272,67 @@ private fun markerAt(markdown: String, index: Int): String? {
     }
 }
 
-/** Where the marker that opened at [start] closes, or -1 when it never does. */
-private fun closingMarker(markdown: String, marker: String, start: Int): Int {
+/**
+ * Where the marker that opened at [start] closes, or -1 when it never does. With [requireFlanking] the closing marker
+ * must follow a non-space character, as CommonMark asks, so `5 * 3 * 2` stays arithmetic.
+ */
+private fun closingMarker(markdown: String, marker: String, start: Int, requireFlanking: Boolean = false): Int {
     var found = markdown.indexOf(marker, start)
     while (found > 0) {
         val closesWord = marker.all { it == '_' } && found + marker.length < markdown.length &&
             markdown[found + marker.length].isLetterOrDigit()
-        if (!closesWord) return found
+        val afterSpace = requireFlanking && markdown[found - 1].isWhitespace()
+        if (!closesWord && !afterSpace) return found
         found = markdown.indexOf(marker, found + marker.length)
     }
     return -1
+}
+
+/**
+ * Where a bare `http://` or `https://` URL that starts at [index] ends, or -1 when none starts there. Sentence
+ * punctuation after the URL and a closing parenthesis it did not open stay outside: `(see https://a.b/c).`
+ */
+private fun bareUrlEnd(markdown: String, index: Int): Int {
+    val schemeLength = when {
+        markdown.startsWith("https://", index, ignoreCase = true) -> 8
+        markdown.startsWith("http://", index, ignoreCase = true) -> 7
+        else -> return -1
+    }
+    var end = index
+    while (end < markdown.length && markdown[end].isUrlChar()) end++
+    var balance = 0
+    for (position in index until end) {
+        when (markdown[position]) {
+            '(' -> balance++
+            ')' -> balance--
+        }
+    }
+    while (end > index) {
+        val last = markdown[end - 1]
+        when {
+            last in ".,;:!?'*" -> end--
+            last == ')' && balance < 0 -> {
+                end--
+                balance++
+            }
+            else -> break
+        }
+    }
+    return if (end > index + schemeLength) end else -1
+}
+
+/**
+ * The characters a bare URL in a description may contain: RFC 3986's set without the IPv6 brackets. Anything else
+ * ends it, so `[https://a.b]` keeps its bracket and the full-width punctuation and text that CJK descriptions put
+ * right after a link stay outside it.
+ */
+private fun Char.isUrlChar(): Boolean =
+    this in 'a'..'z' || this in 'A'..'Z' || this in '0'..'9' || this in "-._~:/?#@!$&'()*+,;=%"
+
+/** A marker only opens a run when text follows it directly: `** bold **` and a lone `*` stay literal. */
+private fun opensRun(markdown: String, index: Int, marker: String): Boolean {
+    val next = index + marker.length
+    return next < markdown.length && !markdown[next].isWhitespace()
 }
 
 private fun isWordBoundaryBefore(markdown: String, index: Int): Boolean =
@@ -284,13 +364,13 @@ private fun depthOf(indent: String): Int =
  * Joins the lines of one paragraph the way Markdown does: a soft break becomes a space, a hard break (two trailing
  * spaces or a trailing backslash) stays a newline.
  */
-private fun joinLines(lines: List<String>): String {
+private fun joinLines(lines: List<String>, preserveLineBreaks: Boolean = false): String {
     val builder = StringBuilder()
     lines.forEachIndexed { position, raw ->
         if (position > 0) {
             val previous = lines[position - 1]
             val previousBreak = previous.endsWith("  ") || previous.endsWith("\\")
-            builder.append(if (previousBreak) '\n' else ' ')
+            builder.append(if (previousBreak || preserveLineBreaks) '\n' else ' ')
         }
         builder.append(raw.removeSuffix("\\").trim())
     }
