@@ -63,6 +63,31 @@ class MarkdownBlocksTest {
     }
 
     @Test
+    fun `description links plain urls and preserves ordinary angle brackets and backslashes`() {
+        assertEquals(
+            listOf(
+                MarkdownSpan.Text("See "),
+                MarkdownSpan.Link("https://anilist.co/manga/1", "https://anilist.co/manga/1"),
+                MarkdownSpan.Text(". <3 and <name> C:\\books"),
+            ),
+            parseMarkdownInline("See https://anilist.co/manga/1. <3 and <name> C:\\books", descriptionMode = true),
+        )
+    }
+
+    @Test
+    fun `description links handle angle brackets and surrounding punctuation`() {
+        assertEquals(
+            listOf(
+                MarkdownSpan.Link("https://example.org/a", "https://example.org/a"),
+                MarkdownSpan.Text(" ("),
+                MarkdownSpan.Link("https://example.org/path", "https://example.org/path"),
+                MarkdownSpan.Text(")."),
+            ),
+            parseMarkdownInline("<https://example.org/a> (https://example.org/path).", descriptionMode = true),
+        )
+    }
+
+    @Test
     fun `blank lines separate paragraphs`() {
         val blocks = parseMarkdownBlocks("one\n\ntwo\n\n\ntwo follows")
 

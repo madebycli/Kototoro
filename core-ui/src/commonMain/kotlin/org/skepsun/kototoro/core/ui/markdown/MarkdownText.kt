@@ -210,7 +210,7 @@ fun descriptionAnnotatedString(markdown: String): AnnotatedString {
                 if (block is MarkdownBlock.Code) {
                     withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) { append(content) }
                 } else {
-                    parseMarkdownInline(content).forEach { span ->
+                    parseMarkdownInline(content, descriptionMode = true).forEach { span ->
                         when (span) {
                             is MarkdownSpan.Text -> withStyle(
                                 SpanStyle(

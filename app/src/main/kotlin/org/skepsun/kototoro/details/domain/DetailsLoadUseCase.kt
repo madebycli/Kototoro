@@ -47,6 +47,8 @@ internal fun Content.hasCompleteDetailsSnapshot(): Boolean {
 }
 
 private const val DETAILS_TRACE_TAG = "DetailsTrace"
+private val HTML_TAG = Regex("</?[A-Za-z][A-Za-z0-9]*(?:\\s[^>]*)?/?>")
+private val DESCRIPTION_MARKDOWN = Regex("\\*\\*.+?\\*\\*|\\[[^]\\n]+]\\([^)\\n]+\\)")
 private val HTML_MARKUP = Regex("</?[A-Za-z][A-Za-z0-9]*(?:\\s[^>]*)?/?>|&(?:#[0-9]+|#x[0-9A-Fa-f]+|[A-Za-z]+);")
 
 /** Komiic keeps its GraphQL comic id in `Content.url`; see [DetailsLoadUseCase.repairLostKomiicIdentity]. */
@@ -543,13 +545,18 @@ class DetailsLoadUseCase @Inject constructor(
     private suspend fun String.parseAsHtml(withImages: Boolean): CharSequence? {
         // Html.fromHtml collapses literal newlines, including those in plain text and Markdown.
         if (!HTML_MARKUP.containsMatchIn(this)) return trim().nullIfEmpty()
+        val html = if (!HTML_TAG.containsMatchIn(this) || DESCRIPTION_MARKDOWN.containsMatchIn(this)) {
+            replace("\r\n", "\n").replace('\r', '\n').replace("\n", "<br>")
+        } else {
+            this
+        }
         return if (withImages) {
             runInterruptible(Dispatchers.IO) {
-                parseAsHtml(imageGetter = imageGetter)
+                html.parseAsHtml(imageGetter = imageGetter)
             }?.filterSpans()
         } else {
             runInterruptible(Dispatchers.Default) {
-                parseAsHtml()
+                html.parseAsHtml()
             }?.filterSpans()?.sanitize()
         }?.trim()?.nullIfEmpty()
     }

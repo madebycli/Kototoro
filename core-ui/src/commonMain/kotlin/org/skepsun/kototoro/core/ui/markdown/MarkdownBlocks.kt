@@ -163,7 +163,7 @@ fun parseMarkdownBlocks(markdown: String, preserveLineBreaks: Boolean = false): 
  * Emphases do not nest: `**bold**` inside a link label is reported as part of the [MarkdownSpan.Link]. Underscore
  * emphases must sit on word boundaries, so `snake_case_name` stays literal.
  */
-fun parseMarkdownInline(markdown: String): List<MarkdownSpan> {
+fun parseMarkdownInline(markdown: String, descriptionMode: Boolean = false): List<MarkdownSpan> {
     val spans = ArrayList<MarkdownSpan>()
     val literal = StringBuilder()
     var index = 0
@@ -176,16 +176,59 @@ fun parseMarkdownInline(markdown: String): List<MarkdownSpan> {
 
     while (index < markdown.length) {
         val char = markdown[index]
-        if (char == '<') {
-            val close = markdown.indexOf('>', index + 1)
-            if (close > index) {
-                val tag = markdown.substring(index + 1, close).trim().lowercase()
-                if (tag == "br" || tag == "br/") literal.append('\n')
-                index = close + 1
+        if (descriptionMode && (markdown.startsWith("https://", index, ignoreCase = true) ||
+                markdown.startsWith("http://", index, ignoreCase = true))
+        ) {
+            val end = markdown.indexOfAny(charArrayOf(' ', '\n', '\t', '<', '>'), index)
+                .let { if (it < 0) markdown.length else it }
+            var urlEnd = end
+            while (urlEnd > index && markdown[urlEnd - 1] in ".,;:!?") urlEnd--
+            var balance = 0
+            for (position in index until urlEnd) {
+                when (markdown[position]) {
+                    '(' -> balance++
+                    ')' -> balance--
+                }
+            }
+            while (urlEnd > index && markdown[urlEnd - 1] == ')' && balance < 0) {
+                urlEnd--
+                balance++
+            }
+            if (urlEnd > index) {
+                flush()
+                val url = markdown.substring(index, urlEnd)
+                spans += MarkdownSpan.Link(url, url)
+                index = urlEnd
                 continue
             }
         }
-        if (char == '\\' && index + 1 < markdown.length) {
+        if (char == '<') {
+            val close = markdown.indexOf('>', index + 1)
+            if (close > index) {
+                val inner = markdown.substring(index + 1, close)
+                if (descriptionMode && !inner.any(Char::isWhitespace) &&
+                    (inner.startsWith("https://", true) || inner.startsWith("http://", true))
+                ) {
+                    flush()
+                    spans += MarkdownSpan.Link(inner, inner)
+                    index = close + 1
+                    continue
+                }
+                val tag = inner.trim().lowercase()
+                if (tag == "br" || tag == "br/") {
+                    literal.append('\n')
+                    index = close + 1
+                    continue
+                }
+                if (!descriptionMode) {
+                    index = close + 1
+                    continue
+                }
+            }
+        }
+        if (char == '\\' && index + 1 < markdown.length &&
+            (!descriptionMode || markdown[index + 1] in "\\`*_{}[]()#+-.!>~")
+        ) {
             literal.append(markdown[index + 1])
             index += 2
             continue
